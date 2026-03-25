@@ -130,6 +130,7 @@ export default function App() {
     try{ return localStorage.getItem(REMINDER_KEY)||""; }catch{ return ""; }
   });
   const [showSettings, setShowSettings] = useState(false);
+  const [showAbout,    setShowAbout]    = useState(false);
   const [settingsForm, setSettingsForm] = useState({commute:"",yearlyBudget:""});
 
   const [sf, setSf] = useState({yearStart:`${today.getFullYear()}-01-01`,startOdo:"",commute:"62",yearlyBudget:String(DEFAULT_BUDGET)});
@@ -545,6 +546,7 @@ export default function App() {
             <div style={{...S.h1,fontSize:"26px"}}>🚗 8-400</div>
           </div>
           <div style={{display:"flex",gap:"8px"}}>
+            <button style={S.btnGhost} className="btn-ghost" onClick={()=>setShowAbout(true)}>ℹ️</button>
             <button style={S.btnGhost} className="btn-ghost" onClick={()=>{
               setSettingsForm({commute:String(appData.setup.commute),yearlyBudget:String(appData.setup.yearlyBudget||DEFAULT_BUDGET)});
               setShowSettings(true);
@@ -770,6 +772,35 @@ export default function App() {
             )}
             <button style={{...S.btnGhost,width:"100%",marginTop:"8px",justifyContent:"center",display:"flex",padding:"12px"}}
               className="btn-ghost" onClick={()=>setShowSettings(false)}>ביטול</button>
+          </div>
+        </div>
+      )}
+
+      {showAbout && (
+        <div className="modal-overlay-anim" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",backdropFilter:"blur(8px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:100,padding:"20px",direction:"rtl"}}>
+          <div className="modal-card-anim" style={{...S.card,width:"100%",maxWidth:"360px",marginBottom:0,border:"1px solid rgba(167,139,250,0.2)"}}>
+            <div style={{textAlign:"center",paddingBottom:"20px",marginBottom:"20px",borderBottom:`1px solid ${cl.border}`}}>
+              <div style={{fontSize:"40px",marginBottom:"8px"}}>🚗</div>
+              <div style={{fontSize:"24px",fontWeight:800,color:cl.text,letterSpacing:"-0.5px"}}>8-400</div>
+              <div style={{fontSize:"12px",color:cl.accent,marginTop:"4px",fontWeight:600}}>ניהול חכם של ק״מ שנתי</div>
+            </div>
+            <div style={{fontSize:"13px",color:cl.muted2,lineHeight:"1.7",marginBottom:"20px"}}>
+              אפליקציה למעקב ק״מ פרטי לאורך השנה — חישוב אוטומטי של ק״מ עבודה מול פרטי, ניהול תקציב שנתי ולוח שנה חכם לסימון ימי עבודה.
+            </div>
+            <div style={{marginBottom:"20px"}}>
+              <div style={{fontSize:"10px",fontWeight:700,color:cl.muted,textTransform:"uppercase",letterSpacing:"1.5px",marginBottom:"10px"}}>האפליקציות שלי</div>
+              <a href="https://thelazyluz-dev.github.io/shaati/" target="_blank" rel="noopener noreferrer"
+                style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px",background:cl.surface2,borderRadius:"12px",border:`1px solid ${cl.border}`,textDecoration:"none",cursor:"pointer"}}>
+                <div>
+                  <div style={{fontSize:"14px",fontWeight:700,color:cl.text}}>⏱ שעתי</div>
+                  <div style={{fontSize:"11px",color:cl.muted,marginTop:"2px"}}>מעקב שעות עבודה</div>
+                </div>
+                <div style={{fontSize:"16px",color:cl.accent}}>←</div>
+              </a>
+            </div>
+            <div style={{textAlign:"center",fontSize:"11px",color:cl.muted,marginBottom:"16px"}}>made by illouzman</div>
+            <button style={{...S.btnGhost,width:"100%",display:"flex",justifyContent:"center",padding:"12px"}}
+              className="btn-ghost" onClick={()=>setShowAbout(false)}>סגור</button>
           </div>
         </div>
       )}

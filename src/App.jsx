@@ -26,10 +26,11 @@ function isWorkday(y,m,d)  { const w=dowOf(y,m,d); return w>=0&&w<=4; }
 function toISO(y,m,d)      { return `${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`; }
 function mKey(y,m)         { return `${y}-${String(m+1).padStart(2,"0")}`; }
 
-function countWorkdays(y, m, offDays=[]) {
+function countWorkdays(y, m, offDays=[], extraDays=[]) {
   let n=0;
   for(let d=1;d<=daysInMonth(y,m);d++){
     const iso=toISO(y,m,d);
+    if(extraDays.includes(iso)){n++;continue;}
     if(isWorkday(y,m,d) && !HOLIDAYS[iso] && !offDays.includes(iso)) n++;
   }
   return n;
@@ -94,7 +95,7 @@ export default function App() {
   const [sf, setSf] = useState({yearStart:`${today.getFullYear()}-01-01`,startOdo:"",commute:"62",yearlyBudget:String(DEFAULT_BUDGET)});
 
   const lastM = new Date(today.getFullYear(),today.getMonth()-1,1);
-  const [uf, setUf] = useState({year:lastM.getFullYear(),month:lastM.getMonth(),odometer:"",offDays:[],note:""});
+  const [uf, setUf] = useState({year:lastM.getFullYear(),month:lastM.getMonth(),odometer:"",offDays:[],extraDays:[]});
 
   useEffect(()=>{
     const d=loadData();
@@ -171,10 +172,10 @@ export default function App() {
     if(!entry?.odometer) return null;
     const prevOdo=getPrevOdo(year,month);
     const totalKm=entry.odometer-prevOdo;
-    const workDays=countWorkdays(year,month,entry.offDays||[]);
+    const workDays=countWorkdays(year,month,entry.offDays||[],entry.extraDays||[]);
     const workKm=workDays*(appData.setup.commute||62);
     const personal=Math.max(0,totalKm-workKm);
-    return {totalKm,workDays,workKm,personal,odometer:entry.odometer,note:entry.note,offDays:entry.offDays||[]};
+    return {totalKm,workDays,workKm,personal,odometer:entry.odometer,offDays:entry.offDays||[],extraDays:entry.extraDays||[]};
   },[appData,getPrevOdo]);
 
   const annual=useMemo(()=>{
@@ -200,11 +201,11 @@ export default function App() {
     const prevOdo=getPrevOdo(uf.year,uf.month);
     const totalKm=Number(uf.odometer)-prevOdo;
     if(totalKm<0||isNaN(totalKm)) return null;
-    const workDays=countWorkdays(uf.year,uf.month,uf.offDays);
+    const workDays=countWorkdays(uf.year,uf.month,uf.offDays,uf.extraDays);
     const workKm=workDays*(appData.setup.commute||62);
     const personal=Math.max(0,totalKm-workKm);
     return {totalKm,workDays,workKm,personal,prevOdo};
-  },[uf.odometer,uf.offDays,uf.year,uf.month,appData,getPrevOdo]);
+  },[uf.odometer,uf.offDays,uf.extraDays,uf.year,uf.month,appData,getPrevOdo]);
 
   function handleSetup(){
     if(!sf.startOdo||!sf.commute||!sf.yearStart) return;
@@ -239,7 +240,7 @@ export default function App() {
     const mk=mKey(uf.year,uf.month);
     const newData={
       ...appData,
-      months:{...(appData.months||{}),[mk]:{odometer:Number(uf.odometer),offDays:uf.offDays,note:uf.note,savedAt:new Date().toISOString()}}
+      months:{...(appData.months||{}),[mk]:{odometer:Number(uf.odometer),offDays:uf.offDays,extraDays:uf.extraDays,savedAt:new Date().toISOString()}}
     };
     persist(newData);
     showToast(`${MONTH_HE[uf.month]} נשמר ✓`);
@@ -249,7 +250,7 @@ export default function App() {
   function openUpdate(year,month){
     const mk=mKey(year,month);
     const ex=appData?.months?.[mk];
-    setUf({year,month,odometer:ex?.odometer?.toString()||"",offDays:ex?.offDays||[],note:ex?.note||""});
+    setUf({year,month,odometer:ex?.odometer?.toString()||"",offDays:ex?.offDays||[],extraDays:ex?.extraDays||[]});
     setTab("update");
   }
 
@@ -259,12 +260,16 @@ export default function App() {
       const y=d.getFullYear(),m=d.getMonth();
       const mk=mKey(y,m);
       const ex=appData?.months?.[mk];
-      return {year:y,month:m,odometer:ex?.odometer?.toString()||"",offDays:ex?.offDays||[],note:ex?.note||""};
+      return {year:y,month:m,odometer:ex?.odometer?.toString()||"",offDays:ex?.offDays||[],extraDays:ex?.extraDays||[]};
     });
   }
 
-  function toggleOffDay(iso){
-    setUf(prev=>({...prev,offDays:prev.offDays.includes(iso)?prev.offDays.filter(d=>d!==iso):[...prev.offDays,iso]}));
+  function toggleDay(iso,naturalWorkday){
+    if(naturalWorkday){
+      setUf(prev=>({...prev,offDays:prev.offDays.includes(iso)?prev.offDays.filter(d=>d!==iso):[...prev.offDays,iso]}));
+    } else {
+      setUf(prev=>({...prev,extraDays:prev.extraDays.includes(iso)?prev.extraDays.filter(d=>d!==iso):[...prev.extraDays,iso]}));
+    }
   }
 
   function doReset(){
@@ -277,11 +282,11 @@ export default function App() {
 
   function exportCSV(){
     if(!annual) return;
-    const rows=[["חודש","ימי עבודה","ק\"מ עבודה","ק\"מ פרטי","סה\"כ ק\"מ","הערה"]];
+    const rows=[["חודש","ימי עבודה","ק\"מ עבודה","ק\"מ פרטי","סה\"כ ק\"מ"]];
     for(const {year,month,key} of annual.months){
       const s=annual.byMonth[key];
       if(!s) continue;
-      rows.push([`${MONTH_HE[month]} ${year}`,s.workDays,s.workKm,s.personal,s.totalKm,`"${(s.note||"").replace(/"/g,'""')}"`]);
+      rows.push([`${MONTH_HE[month]} ${year}`,s.workDays,s.workKm,s.personal,s.totalKm]);
     }
     const csv="\uFEFF"+rows.map(r=>r.join(",")).join("\n");
     const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"});
@@ -333,18 +338,22 @@ export default function App() {
     return(
       <div>
         {/* מקרא */}
-        <div style={{display:"flex",gap:"12px",marginBottom:"10px",fontSize:"11px",color:cl.muted}}>
+        <div style={{display:"flex",gap:"10px",marginBottom:"10px",fontSize:"11px",color:cl.muted,flexWrap:"wrap"}}>
+          <span style={{display:"flex",alignItems:"center",gap:"5px"}}>
+            <span style={{width:11,height:11,borderRadius:3,background:"transparent",border:`1.5px solid ${cl.border}`,display:"inline-block",flexShrink:0}}/>
+            יום עבודה
+          </span>
           <span style={{display:"flex",alignItems:"center",gap:"5px"}}>
             <span style={{width:11,height:11,borderRadius:3,background:cl.redBg,border:`1.5px solid ${cl.red}`,display:"inline-block",flexShrink:0}}/>
             לא נסעתי
           </span>
           <span style={{display:"flex",alignItems:"center",gap:"5px"}}>
             <span style={{width:11,height:11,borderRadius:3,background:cl.yellowBg,border:`1.5px solid #fde68a`,display:"inline-block",flexShrink:0}}/>
-            שישי / שבת / חג
+            חופש / שבת / חג
           </span>
           <span style={{display:"flex",alignItems:"center",gap:"5px"}}>
-            <span style={{width:11,height:11,borderRadius:3,background:"transparent",border:`1.5px solid ${cl.border}`,display:"inline-block",flexShrink:0}}/>
-            יום עבודה
+            <span style={{width:11,height:11,borderRadius:3,background:cl.greenBg,border:`1.5px solid ${cl.green}`,display:"inline-block",flexShrink:0}}/>
+            עבדתי
           </span>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:"2px",marginBottom:"4px"}}>
@@ -356,24 +365,25 @@ export default function App() {
             const iso=toISO(year,month,d);
             const isWD=isWorkday(year,month,d);
             const holiday=HOLIDAYS[iso];
+            const naturalWorkday=isWD&&!holiday;
             const isOff=uf.offDays.includes(iso);
-            const canClick=isWD&&!holiday;
-            const isAutoOff=!isWD||!!holiday;
+            const isExtra=uf.extraDays.includes(iso);
 
             let bg="transparent",color=cl.text,fw="normal";
-            if(isAutoOff){bg=cl.yellowBg;color=cl.yellow;}
+            if(!naturalWorkday){bg=cl.yellowBg;color=cl.yellow;}
             if(isOff){bg=cl.redBg;color=cl.red;fw="700";}
+            if(isExtra){bg=cl.greenBg;color=cl.green;fw="700";}
 
             return(
-              <div key={i} onClick={()=>canClick&&toggleOffDay(iso)}
-                style={{textAlign:"center",padding:"5px 2px 4px",borderRadius:"6px",background:bg,color,fontWeight:fw,cursor:canClick?"pointer":"default",lineHeight:"1.2",minHeight:"36px",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
+              <div key={i} onClick={()=>toggleDay(iso,naturalWorkday)}
+                style={{textAlign:"center",padding:"5px 2px 4px",borderRadius:"6px",background:bg,color,fontWeight:fw,cursor:"pointer",lineHeight:"1.2",minHeight:"36px",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
                 <span style={{fontSize:"13px"}}>{d}</span>
                 {holiday && <span style={{fontSize:"8px",fontWeight:600,marginTop:"1px",lineHeight:"1.1",wordBreak:"break-all",textAlign:"center",maxWidth:"100%"}}>{holiday}</span>}
               </div>
             );
           })}
         </div>
-        <p style={{fontSize:"11px",color:cl.muted,margin:"8px 0 0",textAlign:"center"}}>לחץ על יום עבודה לסימון כ״לא נסעתי״</p>
+        <p style={{fontSize:"11px",color:cl.muted,margin:"8px 0 0",textAlign:"center"}}>לחץ על כל יום כדי להחליף בין יום עבודה / לא עבודה</p>
       </div>
     );
   }
@@ -505,14 +515,6 @@ export default function App() {
             <p style={{...S.hint,marginTop:"-8px",marginBottom:"4px"}}>סמן ימים שנסעת לעבודה פחות מהרגיל — שישי/שבת/חגים לא נספרים ממילא</p>
             {renderCalendar()}
 
-            <label style={{...S.label,marginTop:"14px"}}>הערה (אופציונלי)</label>
-            <textarea
-              style={{...S.input,height:"68px",resize:"vertical",lineHeight:"1.5"}}
-              value={uf.note}
-              onChange={e=>setUf({...uf,note:e.target.value})}
-              placeholder="למשל: נסיעה מיוחדת, ביקור אצל לקוח..."
-            />
-
             {livePreview && (
               <div style={{marginTop:"15px",padding:"12px",background:cl.bg,borderRadius:"8px",fontSize:"14px",display:"flex",gap:"16px"}}>
                 <div>סה"כ: <strong>{livePreview.totalKm}</strong> ק"מ</div>
@@ -548,7 +550,6 @@ export default function App() {
                     <span>עבודה: {s.workKm} ק"מ</span>
                     <span>סה"כ: {s.totalKm} ק"מ</span>
                   </div>
-                  {s.note&&<div style={{fontSize:"12px",color:cl.muted,fontStyle:"italic"}}>{s.note}</div>}
                 </div>
               );
             })}

@@ -381,8 +381,8 @@ export default function App() {
       <div style={S.wrap}>
         <div style={{paddingBottom:"28px",marginBottom:"28px"}}>
           <div style={{fontSize:"13px",fontWeight:600,color:cl.accent,letterSpacing:"2px",textTransform:"uppercase",marginBottom:"10px"}}>ברוך הבא</div>
-          <div style={{...S.h1,fontSize:"32px"}}>🚗 8.4k</div>
-          <div style={{fontSize:"14px",color:cl.muted2,marginTop:"8px",lineHeight:"1.6"}}>Smart Annual Mileage Management</div>
+          <div style={{...S.h1,fontSize:"32px"}}>🚗 8-400</div>
+          <div style={{fontSize:"14px",color:cl.muted2,marginTop:"8px",lineHeight:"1.6"}}>ניהול חכם של ק״מ שנתי</div>
         </div>
         <div style={{...S.cardYellow,display:"flex",gap:"14px",alignItems:"flex-start"}}>
           <span style={{fontSize:"22px",lineHeight:1,marginTop:"2px"}}>💡</span>
@@ -448,14 +448,14 @@ export default function App() {
 
             return(
               <div key={i} className="day-cell" onClick={()=>cycleDay(iso,year,month,d)}
-                style={{textAlign:"center",padding:"5px 2px",borderRadius:"8px",background:cfg.bg,
+                style={{textAlign:"center",padding:"4px 2px",borderRadius:"8px",background:cfg.bg,
                   border:`1px solid ${isToday?cl.accent:cfg.border}`,
-                  color:cfg.color,cursor:"pointer",lineHeight:"1.2",minHeight:"40px",
+                  color:cfg.color,cursor:"pointer",height:"44px",overflow:"hidden",
                   display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:"1px"}}>
-                <span style={{fontSize:"13px",fontWeight:700}}>{d}</span>
+                <span style={{fontSize:"13px",fontWeight:700,lineHeight:1}}>{d}</span>
                 {holiday
-                  ? <span style={{fontSize:"7px",fontWeight:600,lineHeight:"1",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",paddingInline:"2px"}}>{holiday}</span>
-                  : <span style={{fontSize:"9px",opacity:0.7}}>{cfg.icon}</span>
+                  ? <span style={{fontSize:"6px",fontWeight:700,lineHeight:"1.1",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",paddingInline:"2px",opacity:0.9}}>{holiday}</span>
+                  : <span style={{fontSize:"10px",lineHeight:1}}>{cfg.icon}</span>
                 }
               </div>
             );
@@ -541,8 +541,8 @@ export default function App() {
       <div style={S.wrap}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",paddingBottom:"20px",marginBottom:"20px",borderBottom:`1px solid ${cl.border}`}}>
           <div>
-            <div style={{fontSize:"10px",fontWeight:700,color:cl.accent,letterSpacing:"2px",textTransform:"uppercase",marginBottom:"4px"}}>Smart Annual Mileage Management</div>
-            <div style={{...S.h1,fontSize:"26px"}}>🚗 8.4k</div>
+            <div style={{fontSize:"10px",fontWeight:700,color:cl.accent,letterSpacing:"2px",textTransform:"uppercase",marginBottom:"4px"}}>ניהול חכם של ק״מ שנתי</div>
+            <div style={{...S.h1,fontSize:"26px"}}>🚗 8-400</div>
           </div>
           <div style={{display:"flex",gap:"8px"}}>
             <button style={S.btnGhost} className="btn-ghost" onClick={()=>{

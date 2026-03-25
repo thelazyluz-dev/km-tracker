@@ -2,13 +2,13 @@
   "name": "מד ק\"מ חכם",
   "short_name": "מד ק\"מ",
   "description": "מעקב ק\"מ פרטי לצרכי מס",
-  "start_url": "/",
+  "start_url": "/km-tracker/",
   "display": "standalone",
   "background_color": "#f7f6f2",
   "theme_color": "#1a1917",
   "dir": "rtl",
   "lang": "he",
   "icons": [
-    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+    { "src": "/km-tracker/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
   ]
 }

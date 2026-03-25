@@ -50,8 +50,8 @@ async function checkAndNotify() {
 
     await self.registration.showNotification('מד ק"מ 🚗', {
       body: `עדיין לא עדכנת את מד הק"מ לחודש ${MONTH_HE[now.getMonth()]} — כדאי לעדכן לפני שתשכח!`,
-      icon: "/icon.svg",
-      badge: "/icon.svg",
+      icon: self.registration.scope + "icon.svg",
+      badge: self.registration.scope + "icon.svg",
       tag: "km-reminder",
       renotify: false,
       requireInteraction: false,

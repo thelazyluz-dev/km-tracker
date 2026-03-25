@@ -105,7 +105,7 @@ export default function App() {
   // Register Service Worker
   useEffect(()=>{
     if(!("serviceWorker" in navigator)) return;
-    navigator.serviceWorker.register("/sw.js").then(reg=>{
+    navigator.serviceWorker.register(import.meta.env.BASE_URL + "sw.js").then(reg=>{
       // Listen for notification-click → open update tab
       navigator.serviceWorker.addEventListener("message",(e)=>{
         if(e.data?.type==="OPEN_UPDATE_TAB") setTab("update");

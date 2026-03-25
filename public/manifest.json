@@ -4,8 +4,8 @@
   "description": "מעקב ק\"מ פרטי לצרכי מס",
   "start_url": "/km-tracker/",
   "display": "standalone",
-  "background_color": "#0f0f1a",
-  "theme_color": "#0f0f1a",
+  "background_color": "#1a1a2e",
+  "theme_color": "#1a1a2e",
   "dir": "rtl",
   "lang": "he",
   "icons": [

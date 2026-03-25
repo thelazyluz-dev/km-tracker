@@ -63,14 +63,14 @@ function loadData() { try{return JSON.parse(localStorage.getItem(KEY));}catch{re
 function saveData(d) { try{localStorage.setItem(KEY,JSON.stringify(d));}catch{} }
 
 const cl = {
-  bg:           "#0f0f1a",
-  surface:      "#181828",
-  surface2:     "#20202e",
-  border:       "rgba(255,255,255,0.1)",
-  borderStrong: "rgba(255,255,255,0.18)",
+  bg:           "#1a1a2e",
+  surface:      "#242438",
+  surface2:     "#2e2e46",
+  border:       "rgba(255,255,255,0.13)",
+  borderStrong: "rgba(255,255,255,0.22)",
   text:         "#f2f0fa",
-  muted:        "rgba(242,240,250,0.45)",
-  muted2:       "rgba(242,240,250,0.75)",
+  muted:        "rgba(242,240,250,0.55)",
+  muted2:       "rgba(242,240,250,0.82)",
   accent:       "#a78bfa",
   accentBg:     "rgba(167,139,250,0.12)",
   green:        "#34d399",

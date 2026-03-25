@@ -304,7 +304,7 @@ export default function App() {
     <div style={S.page}>
       <div style={S.wrap}>
         <div style={{paddingBottom:"20px",marginBottom:"20px",borderBottom:`2px solid ${cl.text}`}}>
-          <div style={S.h1}>🚗 מד ק"מ חכם</div>
+          <div style={S.h1}>🚗 8.4k</div>
         </div>
         <div style={S.cardYellow}>
           <div style={{fontSize:"13px",color:cl.yellow,lineHeight:"1.7"}}>
@@ -323,6 +323,7 @@ export default function App() {
           <input style={S.input} type="number" value={sf.yearlyBudget} onChange={e=>setSf({...sf,yearlyBudget:e.target.value})}/>
           <button className="btn-main" style={S.btn} onClick={handleSetup}>התחל מעקב ←</button>
         </div>
+        <div style={{textAlign:"center",fontSize:"11px",color:cl.muted,marginTop:"16px",paddingBottom:"8px"}}>made by illouzman</div>
       </div>
     </div>
   );
@@ -437,7 +438,7 @@ export default function App() {
     <div style={S.page}>
       <div style={S.wrap}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",paddingBottom:"18px",marginBottom:"16px",borderBottom:`2px solid ${cl.text}`}}>
-          <div style={S.h1}>🚗 מד ק"מ</div>
+          <div style={S.h1}>🚗 8.4k</div>
           <div style={{display:"flex",gap:"8px"}}>
             <button style={S.btnGhost} onClick={()=>{
               setSettingsForm({commute:String(appData.setup.commute),yearlyBudget:String(appData.setup.yearlyBudget||DEFAULT_BUDGET)});
@@ -587,6 +588,7 @@ export default function App() {
       )}
 
       {toast && <div className="toast-anim" style={{position:"fixed",bottom:20,left:"50%",transform:"translateX(-50%)",background:toast.color,color:"#fff",padding:"10px 22px",borderRadius:"24px",fontSize:"14px",fontWeight:700,boxShadow:"0 4px 16px rgba(0,0,0,0.18)"}}>{toast.msg}</div>}
+      <div style={{textAlign:"center",fontSize:"11px",color:cl.muted,marginTop:"24px",paddingBottom:"8px"}}>made by illouzman</div>
     </div>
   );
 }

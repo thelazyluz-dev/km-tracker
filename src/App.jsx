@@ -189,7 +189,7 @@ export default function App() {
     const budget=appData.setup.yearlyBudget||DEFAULT_BUDGET;
     const remaining=Math.max(0,budget-totalPersonal);
     const monthsLeft=months.filter(m=>m.key>=todayKey).length;
-    const allowance=monthsLeft>0?Math.round(remaining/monthsLeft):0;
+    const allowance=Math.round(budget/12);
     const pct=Math.min(100,Math.round(totalPersonal/budget*100));
     const maxPersonal=Math.max(1,...Object.values(byMonth).map(s=>s.personal));
     return {totalPersonal,remaining,monthsLeft,allowance,pct,byMonth,months,budget,maxPersonal};

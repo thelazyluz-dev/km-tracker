@@ -48,32 +48,57 @@ function loadData() { try{return JSON.parse(localStorage.getItem(KEY));}catch{re
 function saveData(d) { try{localStorage.setItem(KEY,JSON.stringify(d));}catch{} }
 
 const cl = {
-  bg:"#f7f6f2", surface:"#ffffff", border:"#e5e3dc",
-  text:"#1a1917", muted:"#7c7870", accent:"#1a1917",
-  green:"#15803d", greenBg:"#dcfce7",
-  orange:"#c2410c", orangeBg:"#ffedd5",
-  red:"#b91c1c", redBg:"#fee2e2",
-  yellow:"#92400e", yellowBg:"#fef9c3",
-  blue:"#1d4ed8", blueBg:"#dbeafe",
+  bg:           "#08080e",
+  surface:      "#0f0f18",
+  surface2:     "#161622",
+  border:       "rgba(255,255,255,0.06)",
+  borderStrong: "rgba(255,255,255,0.13)",
+  text:         "#f0eef8",
+  muted:        "rgba(240,238,248,0.35)",
+  muted2:       "rgba(240,238,248,0.62)",
+  accent:       "#a78bfa",
+  accentBg:     "rgba(167,139,250,0.1)",
+  green:        "#34d399",
+  greenBg:      "rgba(52,211,153,0.1)",
+  orange:       "#fb923c",
+  orangeBg:     "rgba(251,146,60,0.1)",
+  red:          "#f87171",
+  redBg:        "rgba(248,113,113,0.1)",
+  yellow:       "#fbbf24",
+  yellowBg:     "rgba(251,191,36,0.08)",
+  blue:         "#818cf8",
+  blueBg:       "rgba(129,140,248,0.1)",
 };
 
 const S = {
-  page:  {minHeight:"100vh",background:cl.bg,display:"flex",justifyContent:"center",padding:"20px 16px 70px",fontFamily:"system-ui, sans-serif",direction:"rtl"},
+  page:  {minHeight:"100vh",background:cl.bg,display:"flex",justifyContent:"center",padding:"24px 16px 80px",fontFamily:"-apple-system,BlinkMacSystemFont,'SF Pro Display',system-ui,sans-serif",direction:"rtl"},
   wrap:  {width:"100%",maxWidth:"430px"},
-  card:  {background:cl.surface,borderRadius:"14px",padding:"20px 22px",marginBottom:"12px",border:`1px solid ${cl.border}`},
-  cardYellow: {background:cl.yellowBg,borderRadius:"14px",padding:"16px 18px",marginBottom:"12px",border:`1px solid #fde68a`},
-  sectionTitle: {fontSize:"11px",fontWeight:700,color:cl.muted,textTransform:"uppercase",letterSpacing:"1px",margin:"0 0 14px"},
-  h1:    {fontSize:"26px",fontWeight:800,color:cl.text,margin:0,letterSpacing:"-0.5px"},
-  label: {display:"block",fontSize:"12px",fontWeight:600,color:cl.muted,marginBottom:"6px",marginTop:"16px",textTransform:"uppercase",letterSpacing:"0.5px"},
-  hint:  {fontSize:"12px",color:cl.muted,marginTop:"5px",lineHeight:"1.5"},
-  input: {width:"100%",background:cl.bg,border:`1px solid ${cl.border}`,borderRadius:"8px",color:cl.text,fontSize:"16px",padding:"11px 13px",boxSizing:"border-box",outline:"none",fontFamily:"inherit"},
-  btn:   {width:"100%",marginTop:"16px",padding:"14px",borderRadius:"10px",background:cl.text,color:"#fff",fontWeight:700,fontSize:"15px",border:"none",cursor:"pointer",fontFamily:"inherit",letterSpacing:"0.2px",backgroundImage:"linear-gradient(135deg,#1a1917 0%,#343230 100%)"},
-  btnGhost: {padding:"8px 14px",borderRadius:"8px",background:"transparent",border:`1px solid ${cl.border}`,color:cl.muted,fontSize:"13px",cursor:"pointer",fontFamily:"inherit"},
-  tab:  (a)=>({flex:1,padding:"10px 4px",background:a?cl.text:"transparent",color:a?"#fff":cl.muted,border:"none",cursor:"pointer",fontWeight:a?700:400,fontSize:"14px",fontFamily:"inherit",borderRadius:"7px"}),
-  tabs: {display:"flex",background:cl.bg,borderRadius:"10px",padding:"4px",marginBottom:"16px",border:`1px solid ${cl.border}`},
-  row:  {display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:`1px solid ${cl.border}`,fontSize:"14px"},
-  badge:(c,bg)=>({display:"inline-flex",alignItems:"center",padding:"4px 10px",borderRadius:"20px",fontSize:"12px",fontWeight:700,color:c,background:bg}),
+  card:  {background:cl.surface,borderRadius:"20px",padding:"22px 24px",marginBottom:"14px",border:`1px solid ${cl.border}`},
+  cardYellow: {background:"rgba(251,191,36,0.07)",borderRadius:"20px",padding:"18px 20px",marginBottom:"14px",border:"1px solid rgba(251,191,36,0.18)"},
+  sectionTitle: {fontSize:"10px",fontWeight:700,color:cl.muted,textTransform:"uppercase",letterSpacing:"1.5px",margin:"0 0 16px"},
+  h1:    {fontSize:"28px",fontWeight:800,color:cl.text,margin:0,letterSpacing:"-0.5px"},
+  label: {display:"block",fontSize:"11px",fontWeight:600,color:cl.muted,marginBottom:"8px",marginTop:"20px",textTransform:"uppercase",letterSpacing:"1px"},
+  hint:  {fontSize:"12px",color:cl.muted,marginTop:"5px",lineHeight:"1.6"},
+  input: {width:"100%",background:cl.surface2,border:`1px solid ${cl.border}`,borderRadius:"12px",color:cl.text,fontSize:"16px",padding:"14px 16px",boxSizing:"border-box",outline:"none",fontFamily:"inherit"},
+  btn:   {width:"100%",marginTop:"20px",padding:"16px",borderRadius:"14px",background:"linear-gradient(135deg,#7c3aed 0%,#a78bfa 100%)",color:"#fff",fontWeight:700,fontSize:"15px",border:"none",cursor:"pointer",fontFamily:"inherit",letterSpacing:"0.3px"},
+  btnGhost: {padding:"9px 16px",borderRadius:"10px",background:"transparent",border:`1px solid ${cl.border}`,color:cl.muted2,fontSize:"13px",cursor:"pointer",fontFamily:"inherit"},
+  tab:  (a)=>({flex:1,padding:"10px 4px",background:a?"rgba(167,139,250,0.12)":"transparent",color:a?cl.accent:cl.muted,border:"none",cursor:"pointer",fontWeight:a?700:400,fontSize:"13px",fontFamily:"inherit",borderRadius:"9px"}),
+  tabs: {display:"flex",background:cl.surface2,borderRadius:"14px",padding:"4px",marginBottom:"20px",border:`1px solid ${cl.border}`},
+  row:  {display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 0",borderBottom:`1px solid ${cl.border}`,fontSize:"14px"},
+  badge:(c,bg)=>({display:"inline-flex",alignItems:"center",padding:"4px 12px",borderRadius:"20px",fontSize:"12px",fontWeight:700,color:c,background:bg}),
 };
+
+function RingProgress({pct,color}){
+  const r=46, circ=2*Math.PI*r, offset=circ-(Math.min(pct,100)/100)*circ;
+  return(
+    <svg width="120" height="120" style={{transform:"rotate(-90deg)",flexShrink:0}}>
+      <circle cx="60" cy="60" r={r} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="9"/>
+      <circle cx="60" cy="60" r={r} fill="none" stroke={color} strokeWidth="9" strokeLinecap="round"
+        strokeDasharray={circ} strokeDashoffset={offset}
+        style={{transition:"stroke-dashoffset 1.1s cubic-bezier(0.4,0,0.2,1)",filter:`drop-shadow(0 0 6px ${color}88)`}}/>
+    </svg>
+  );
+}
 
 const REMINDER_KEY = "km_reminder_dismissed";
 
@@ -303,24 +328,27 @@ export default function App() {
   if(screen==="setup") return(
     <div style={S.page}>
       <div style={S.wrap}>
-        <div style={{paddingBottom:"20px",marginBottom:"20px",borderBottom:`2px solid ${cl.text}`}}>
-          <div style={S.h1}>🚗 8.4k</div>
+        <div style={{paddingBottom:"28px",marginBottom:"28px"}}>
+          <div style={{fontSize:"13px",fontWeight:600,color:cl.accent,letterSpacing:"2px",textTransform:"uppercase",marginBottom:"10px"}}>ברוך הבא</div>
+          <div style={{...S.h1,fontSize:"32px"}}>🚗 8.4k</div>
+          <div style={{fontSize:"14px",color:cl.muted,marginTop:"8px",lineHeight:"1.6"}}>מעקב ק"מ פרטי חכם לצרכי מס</div>
         </div>
-        <div style={S.cardYellow}>
+        <div style={{...S.cardYellow,display:"flex",gap:"14px",alignItems:"flex-start"}}>
+          <span style={{fontSize:"22px",lineHeight:1,marginTop:"2px"}}>💡</span>
           <div style={{fontSize:"13px",color:cl.yellow,lineHeight:"1.7"}}>
-            <strong>איך עובד המעקב?</strong><br/>
-            פעם בחודש מזינים את קריאת המד ומסמנים ימים שלא נסעתם לעבודה.
+            <strong>פעם בחודש</strong> מזינים את קריאת המד ומסמנים ימים שלא נסעתם לעבודה. הכל מחושב אוטומטית.
           </div>
         </div>
         <div style={S.card}>
-          <label style={S.label}>מתי מתחילה שנת המדידה?</label>
+          <div style={S.sectionTitle}>הגדרות ראשוניות</div>
+          <label style={{...S.label,marginTop:0}}>תחילת שנת מדידה</label>
           <input style={S.input} type="date" value={sf.yearStart} onChange={e=>setSf({...sf,yearStart:e.target.value})}/>
           <label style={S.label}>קריאת מד ביום זה (ק"מ)</label>
-          <input style={S.input} type="number" value={sf.startOdo} onChange={e=>setSf({...sf,startOdo:e.target.value})}/>
-          <label style={S.label}>הלוך-חזור לעבודה (ק"מ ביום)</label>
-          <input style={S.input} type="number" value={sf.commute} onChange={e=>setSf({...sf,commute:e.target.value})}/>
+          <input style={S.input} type="number" placeholder="למשל: 45000" value={sf.startOdo} onChange={e=>setSf({...sf,startOdo:e.target.value})}/>
+          <label style={S.label}>הלוך-חזור לעבודה (ק"מ/יום)</label>
+          <input style={S.input} type="number" placeholder="למשל: 62" value={sf.commute} onChange={e=>setSf({...sf,commute:e.target.value})}/>
           <label style={S.label}>תקציב ק"מ פרטי שנתי</label>
-          <input style={S.input} type="number" value={sf.yearlyBudget} onChange={e=>setSf({...sf,yearlyBudget:e.target.value})}/>
+          <input style={S.input} type="number" placeholder="למשל: 8400" value={sf.yearlyBudget} onChange={e=>setSf({...sf,yearlyBudget:e.target.value})}/>
           <button className="btn-main" style={S.btn} onClick={handleSetup}>התחל מעקב ←</button>
         </div>
       </div>
@@ -392,17 +420,18 @@ export default function App() {
   function renderTimeline(){
     if(!annual) return null;
     return(
-      <div style={{display:"flex",gap:"6px",flexWrap:"wrap"}}>
+      <div style={{display:"flex",gap:"5px",flexWrap:"wrap"}}>
         {annual.months.map(({year,month,key})=>{
           const s=annual.byMonth[key];
           const isCurr=key===todayKey;
-          let bg=cl.border, textC=cl.muted;
+          let bg="rgba(255,255,255,0.04)", textC=cl.muted, borderC="transparent";
           if(s){ bg=s.personal>annual.allowance*1.2?cl.redBg:cl.greenBg; textC=s.personal>annual.allowance*1.2?cl.red:cl.green; }
-          else if(isCurr){ bg=cl.yellowBg; textC=cl.yellow; }
+          else if(isCurr){ bg=cl.accentBg; textC=cl.accent; }
+          if(isCurr) borderC=cl.accent;
 
           return(
             <div key={key} className="month-pill" onClick={()=>openUpdate(year,month)}
-              style={{padding:"6px 10px",borderRadius:"10px",background:bg,cursor:"pointer",border:isCurr?`2px solid ${cl.text}`:`2px solid transparent`,color:textC,fontSize:"12px",minWidth:"44px",textAlign:"center",fontWeight:isCurr?700:500}}>
+              style={{padding:"6px 10px",borderRadius:"10px",background:bg,cursor:"pointer",border:`1.5px solid ${borderC}`,color:textC,fontSize:"12px",minWidth:"42px",textAlign:"center",fontWeight:isCurr?700:500}}>
               {MONTH_HE[month].slice(0,3)}
             </div>
           );
@@ -413,7 +442,7 @@ export default function App() {
 
   function renderBarChart(){
     if(!annual) return null;
-    const barColor=(p)=>p>annual.allowance*1.2?cl.red:p>annual.allowance?cl.orange:cl.green;
+    const barGrad=(p)=>p>annual.allowance*1.2?"linear-gradient(180deg,#f87171,#fca5a5)":p>annual.allowance?"linear-gradient(180deg,#fb923c,#fcd34d)":"linear-gradient(180deg,#a78bfa,#34d399)";
     return(
       <div style={{display:"flex",alignItems:"flex-end",gap:"4px",height:"90px",paddingTop:"10px"}}>
         {annual.months.map(({year,month,key},i)=>{
@@ -423,8 +452,8 @@ export default function App() {
           return(
             <div key={key} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:"2px"}}>
               <div className={s?"bar-seg":undefined}
-                style={{width:"100%",height:`${barH}px`,background:s?barColor(s.personal):cl.border,borderRadius:"4px 4px 0 0",outline:isCurr?`2px solid ${cl.text}`:"none",animationDelay:`${i*0.04}s`}}/>
-              <div style={{fontSize:"9px",color:isCurr?cl.text:cl.muted,fontWeight:isCurr?700:"normal"}}>
+                style={{width:"100%",height:`${barH}px`,background:s?barGrad(s.personal):"rgba(255,255,255,0.05)",borderRadius:"4px 4px 0 0",outline:isCurr?`2px solid ${cl.accent}`:"none",animationDelay:`${i*0.04}s`}}/>
+              <div style={{fontSize:"9px",color:isCurr?cl.accent:cl.muted,fontWeight:isCurr?700:"normal"}}>
                 {MONTH_HE[month].slice(0,3)}
               </div>
             </div>
@@ -437,14 +466,17 @@ export default function App() {
   return(
     <div style={S.page}>
       <div style={S.wrap}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",paddingBottom:"18px",marginBottom:"16px",borderBottom:`2px solid ${cl.text}`}}>
-          <div style={S.h1}>🚗 8.4k</div>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",paddingBottom:"20px",marginBottom:"20px",borderBottom:`1px solid ${cl.border}`}}>
+          <div>
+            <div style={{fontSize:"10px",fontWeight:700,color:cl.accent,letterSpacing:"2px",textTransform:"uppercase",marginBottom:"4px"}}>מעקב ק"מ</div>
+            <div style={{...S.h1,fontSize:"26px"}}>🚗 8.4k</div>
+          </div>
           <div style={{display:"flex",gap:"8px"}}>
-            <button style={S.btnGhost} onClick={()=>{
+            <button style={S.btnGhost} className="btn-ghost" onClick={()=>{
               setSettingsForm({commute:String(appData.setup.commute),yearlyBudget:String(appData.setup.yearlyBudget||DEFAULT_BUDGET)});
               setShowSettings(true);
-            }}>⚙️ הגדרות</button>
-            <button style={S.btnGhost} onClick={doReset}>איפוס</button>
+            }}>⚙️</button>
+            <button style={S.btnGhost} className="btn-ghost" onClick={doReset}>איפוס</button>
           </div>
         </div>
 
@@ -457,45 +489,61 @@ export default function App() {
         {tab==="dashboard" && (
           <div className="tab-content">
             {annual && !annual.byMonth[todayKey] && reminderDismissed!==todayKey && (
-              <div className="reminder-banner km-card" style={{...S.card,background:"#fef9c3",border:"1px solid #fde68a",display:"flex",alignItems:"flex-start",gap:"12px",marginBottom:"12px"}}>
-                <span style={{fontSize:"24px",lineHeight:1}}>🔔</span>
+              <div className="reminder-banner km-card" style={{...S.card,background:"rgba(251,191,36,0.07)",border:"1px solid rgba(251,191,36,0.2)",display:"flex",alignItems:"flex-start",gap:"14px",marginBottom:"14px"}}>
+                <span style={{fontSize:"22px",lineHeight:1,marginTop:"2px"}}>🔔</span>
                 <div style={{flex:1}}>
-                  <div style={{fontWeight:700,fontSize:"14px",color:cl.yellow,marginBottom:"4px"}}>
-                    תזכורת חודשית
+                  <div style={{fontWeight:700,fontSize:"14px",color:cl.yellow,marginBottom:"5px"}}>תזכורת חודשית</div>
+                  <div style={{fontSize:"13px",color:"rgba(251,191,36,0.75)",lineHeight:"1.6"}}>
+                    עוד לא הזנת את מד הק"מ לחודש <strong style={{color:cl.yellow}}>{MONTH_HE[today.getMonth()]}</strong>.
                   </div>
-                  <div style={{fontSize:"13px",color:cl.yellow,lineHeight:"1.5"}}>
-                    עוד לא הזנת את מד הק"מ לחודש <strong>{MONTH_HE[today.getMonth()]}</strong>.
-                    עדכן כדי לשמור על מעקב מדויק.
-                  </div>
-                  <div style={{display:"flex",gap:"8px",marginTop:"10px"}}>
-                    <button className="btn-main" style={{...S.btn,marginTop:0,padding:"8px 16px",fontSize:"13px",width:"auto"}}
+                  <div style={{display:"flex",gap:"8px",marginTop:"12px"}}>
+                    <button className="btn-main" style={{...S.btn,marginTop:0,padding:"9px 18px",fontSize:"13px",width:"auto",background:"linear-gradient(135deg,#92400e,#fbbf24)"}}
                       onClick={()=>{ setTab("update"); setUf(f=>({...f,year:today.getFullYear(),month:today.getMonth()})); }}>
                       עדכן עכשיו ←
                     </button>
-                    <button style={S.btnGhost} onClick={dismissReminder}>אחר כך</button>
+                    <button style={S.btnGhost} className="btn-ghost" onClick={dismissReminder}>אחר כך</button>
                   </div>
                 </div>
               </div>
             )}
-            <div className="km-card" style={S.card}>
+            {/* Hero card */}
+            <div className="km-card" style={{...S.card,background:"linear-gradient(145deg,rgba(124,58,237,0.15) 0%,rgba(52,211,153,0.06) 100%)",border:"1px solid rgba(167,139,250,0.18)"}}>
               <div style={S.sectionTitle}>נותר לנסוע השנה</div>
-              <div style={{fontSize:"54px",fontWeight:800,color:annual.remaining<1000?cl.red:cl.green}}>
-                {annual.remaining.toLocaleString()}
-              </div>
-              <div style={{fontSize:"13px",color:cl.muted,marginTop:"4px"}}>מתוך {annual.budget.toLocaleString()} ק"מ שנתי</div>
-              <div style={{background:cl.border,borderRadius:"6px",height:"10px",marginTop:"14px",overflow:"hidden"}}>
-                <div className="progress-fill" style={{width:`${annual.pct}%`,height:"100%",borderRadius:"6px",background:annual.pct>90?cl.red:cl.green}}/>
+              <div style={{display:"flex",alignItems:"center",gap:"20px"}}>
+                <div style={{position:"relative",flexShrink:0}}>
+                  <RingProgress pct={annual.pct} color={annual.pct>90?cl.red:annual.pct>70?cl.orange:cl.accent}/>
+                  <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
+                    <div style={{fontSize:"15px",fontWeight:800,color:annual.pct>90?cl.red:cl.muted2}}>{annual.pct}%</div>
+                    <div style={{fontSize:"9px",color:cl.muted,letterSpacing:"0.5px"}}>נוצל</div>
+                  </div>
+                </div>
+                <div style={{flex:1}}>
+                  <div className="stat-num" style={{fontSize:"52px",fontWeight:800,lineHeight:1,background:annual.remaining<1000?"linear-gradient(135deg,#f87171,#fca5a5)":annual.pct>70?"linear-gradient(135deg,#fb923c,#fcd34d)":"linear-gradient(135deg,#a78bfa,#34d399)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",backgroundClip:"text"}}>
+                    {annual.remaining.toLocaleString()}
+                  </div>
+                  <div style={{fontSize:"13px",color:cl.muted,marginTop:"6px"}}>מתוך <span style={{color:cl.muted2,fontWeight:600}}>{annual.budget.toLocaleString()}</span> ק"מ שנתי</div>
+                  <div style={{background:"rgba(255,255,255,0.05)",borderRadius:"8px",height:"6px",marginTop:"14px",overflow:"hidden"}}>
+                    <div className="progress-fill" style={{width:`${annual.pct}%`,height:"100%",borderRadius:"8px",background:annual.pct>90?"linear-gradient(90deg,#f87171,#fca5a5)":annual.pct>70?"linear-gradient(90deg,#fb923c,#fcd34d)":"linear-gradient(90deg,#7c3aed,#a78bfa)"}}/>
+                  </div>
+                </div>
               </div>
             </div>
+            {/* Allowance card */}
             <div className="km-card" style={S.card}>
-              <div style={S.sectionTitle}>מכסה מחושבת לחודש</div>
-              <div style={{fontSize:"42px",fontWeight:800}}>{annual.allowance.toLocaleString()}</div>
+              <div style={S.sectionTitle}>מכסה לחודש הנוכחי</div>
+              <div style={{display:"flex",alignItems:"flex-end",gap:"8px"}}>
+                <div className="stat-num" style={{fontSize:"44px",fontWeight:800,lineHeight:1,background:"linear-gradient(135deg,#818cf8,#a78bfa)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",backgroundClip:"text"}}>
+                  {annual.allowance.toLocaleString()}
+                </div>
+                <div style={{fontSize:"14px",color:cl.muted,marginBottom:"6px"}}>ק"מ</div>
+              </div>
+              <div style={{fontSize:"12px",color:cl.muted,marginTop:"6px"}}>מחולק שווה בין {annual.monthsLeft} חודשים</div>
             </div>
             <div className="km-card" style={S.card}>
               <div style={S.sectionTitle}>ק"מ פרטי לפי חודש</div>
               {renderBarChart()}
             </div>
-            <div className="km-card" style={S.card}>
+            <div className="km-card" style={{...S.card,marginBottom:0}}>
               <div style={S.sectionTitle}>ציר זמן שנתי</div>
               {renderTimeline()}
             </div>
@@ -504,52 +552,73 @@ export default function App() {
 
         {tab==="update" && (
           <div className="tab-content km-card" style={S.card}>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"14px"}}>
-              <button style={S.btnGhost} onClick={()=>navigateMonth(-1)}>→</button>
-              <div style={{...S.sectionTitle,margin:0}}>{MONTH_HE[uf.month]} {uf.year}</div>
-              <button style={S.btnGhost} onClick={()=>navigateMonth(1)}>←</button>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"18px"}}>
+              <button style={S.btnGhost} className="btn-ghost" onClick={()=>navigateMonth(-1)}>→</button>
+              <div style={{textAlign:"center"}}>
+                <div style={{fontSize:"11px",fontWeight:700,color:cl.accent,letterSpacing:"1.5px",textTransform:"uppercase"}}>{uf.year}</div>
+                <div style={{fontSize:"18px",fontWeight:800,color:cl.text,marginTop:"2px"}}>{MONTH_HE[uf.month]}</div>
+              </div>
+              <button style={S.btnGhost} className="btn-ghost" onClick={()=>navigateMonth(1)}>←</button>
             </div>
-            <label style={S.label}>קריאת מד נוכחית</label>
-            <input style={S.input} type="number" value={uf.odometer} onChange={e=>setUf({...uf,odometer:e.target.value})}/>
+            <label style={{...S.label,marginTop:0}}>קריאת מד נוכחית (ק"מ)</label>
+            <input style={S.input} type="number" placeholder="למשל: 47250" value={uf.odometer} onChange={e=>setUf({...uf,odometer:e.target.value})}/>
 
-            <label style={S.label}>ימים שלא נסעת לעבודה</label>
-            <p style={{...S.hint,marginTop:"-8px",marginBottom:"4px"}}>סמן ימים שנסעת לעבודה פחות מהרגיל — שישי/שבת/חגים לא נספרים ממילא</p>
+            <label style={S.label}>ימי עבודה / חופש</label>
+            <p style={{...S.hint,marginTop:"-6px",marginBottom:"8px"}}>לחץ על כל יום כדי לשנות את סטטוסו</p>
             {renderCalendar()}
 
             {livePreview && (
-              <div style={{marginTop:"15px",padding:"12px",background:cl.bg,borderRadius:"8px",fontSize:"14px",display:"flex",gap:"16px"}}>
-                <div>סה"כ: <strong>{livePreview.totalKm}</strong> ק"מ</div>
-                <div>עבודה: <strong>{livePreview.workKm}</strong> ק"מ</div>
-                <div>פרטי: <strong style={{color:annual&&livePreview.personal>annual.allowance?cl.orange:cl.blue}}>{livePreview.personal}</strong> ק"מ</div>
+              <div style={{marginTop:"16px",padding:"16px",background:cl.surface2,borderRadius:"14px",display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"8px",border:`1px solid ${cl.border}`}}>
+                <div style={{textAlign:"center"}}>
+                  <div style={{fontSize:"11px",color:cl.muted,marginBottom:"4px",textTransform:"uppercase",letterSpacing:"0.8px"}}>סה"כ</div>
+                  <div style={{fontSize:"20px",fontWeight:800,color:cl.text}}>{livePreview.totalKm}</div>
+                  <div style={{fontSize:"10px",color:cl.muted}}>ק"מ</div>
+                </div>
+                <div style={{textAlign:"center",borderRight:`1px solid ${cl.border}`,borderLeft:`1px solid ${cl.border}`}}>
+                  <div style={{fontSize:"11px",color:cl.muted,marginBottom:"4px",textTransform:"uppercase",letterSpacing:"0.8px"}}>עבודה</div>
+                  <div style={{fontSize:"20px",fontWeight:800,color:cl.blue}}>{livePreview.workKm}</div>
+                  <div style={{fontSize:"10px",color:cl.muted}}>ק"מ</div>
+                </div>
+                <div style={{textAlign:"center"}}>
+                  <div style={{fontSize:"11px",color:cl.muted,marginBottom:"4px",textTransform:"uppercase",letterSpacing:"0.8px"}}>פרטי</div>
+                  <div style={{fontSize:"20px",fontWeight:800,color:annual&&livePreview.personal>annual.allowance?cl.orange:cl.green}}>{livePreview.personal}</div>
+                  <div style={{fontSize:"10px",color:cl.muted}}>ק"מ</div>
+                </div>
               </div>
             )}
 
-            <button className="btn-main" style={S.btn} onClick={handleSave}>שמור עדכון</button>
+            <button className="btn-main" style={S.btn} onClick={handleSave}>שמור עדכון ✓</button>
           </div>
         )}
 
         {tab==="history" && (
-          <div className="tab-content km-card" style={S.card}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px"}}>
-              <div style={{...S.sectionTitle,margin:0}}>היסטוריית נסיעות</div>
-              <button style={S.btnGhost} onClick={exportCSV}>⬇ CSV</button>
+          <div className="tab-content">
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"16px"}}>
+              <div style={S.sectionTitle}>היסטוריית נסיעות</div>
+              <button style={S.btnGhost} className="btn-ghost" onClick={exportCSV}>⬇ CSV</button>
             </div>
             {annual.months.map(m=>{
               const s=annual.byMonth[m.key];
               if(!s) return null;
               const isOver=annual.allowance>0&&s.personal>annual.allowance*1.2;
+              const barW=annual.maxPersonal>0?Math.round((s.personal/annual.maxPersonal)*100):0;
               return(
-                <div key={m.key} style={{...S.row,flexDirection:"column",alignItems:"flex-start",gap:"6px"}}>
-                  <div style={{display:"flex",justifyContent:"space-between",width:"100%",alignItems:"center"}}>
-                    <strong>{MONTH_HE[m.month]} {m.year}</strong>
+                <div key={m.key} className="km-card" style={{...S.card,marginBottom:"10px",cursor:"pointer"}} onClick={()=>openUpdate(m.year,m.month)}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"10px"}}>
+                    <div>
+                      <div style={{fontWeight:700,fontSize:"15px",color:cl.text}}>{MONTH_HE[m.month]}</div>
+                      <div style={{fontSize:"11px",color:cl.muted,marginTop:"2px"}}>{m.year} · {s.workDays} ימי עבודה</div>
+                    </div>
                     <span style={S.badge(isOver?cl.red:cl.green,isOver?cl.redBg:cl.greenBg)}>
-                      פרטי: {s.personal} ק"מ
+                      {s.personal.toLocaleString()} ק"מ פרטי
                     </span>
                   </div>
-                  <div style={{fontSize:"12px",color:cl.muted,display:"flex",gap:"14px"}}>
-                    <span>ימי עבודה: {s.workDays}</span>
-                    <span>עבודה: {s.workKm} ק"מ</span>
-                    <span>סה"כ: {s.totalKm} ק"מ</span>
+                  <div style={{background:"rgba(255,255,255,0.05)",borderRadius:"4px",height:"4px",overflow:"hidden"}}>
+                    <div style={{width:`${barW}%`,height:"100%",borderRadius:"4px",background:isOver?"linear-gradient(90deg,#f87171,#fca5a5)":"linear-gradient(90deg,#7c3aed,#34d399)",transition:"width 0.6s ease"}}/>
+                  </div>
+                  <div style={{fontSize:"12px",color:cl.muted,marginTop:"8px",display:"flex",gap:"16px"}}>
+                    <span>עבודה: <span style={{color:cl.muted2}}>{s.workKm}</span></span>
+                    <span>סה"כ: <span style={{color:cl.muted2}}>{s.totalKm}</span></span>
                   </div>
                 </div>
               );
@@ -559,35 +628,36 @@ export default function App() {
       </div>
 
       {showSettings && (
-        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:100,padding:"20px",direction:"rtl"}}>
-          <div style={{...S.card,width:"100%",maxWidth:"360px",marginBottom:0}}>
-            <div style={{...S.sectionTitle,marginBottom:"16px"}}>עריכת הגדרות</div>
-            <label style={S.label}>הלוך-חזור לעבודה (ק"מ ביום)</label>
+        <div className="modal-overlay-anim" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",backdropFilter:"blur(8px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:100,padding:"20px",direction:"rtl"}}>
+          <div className="modal-card-anim" style={{...S.card,width:"100%",maxWidth:"360px",marginBottom:0,border:"1px solid rgba(167,139,250,0.2)"}}>
+            <div style={{fontSize:"18px",fontWeight:800,color:cl.text,marginBottom:"4px"}}>הגדרות</div>
+            <div style={{fontSize:"12px",color:cl.muted,marginBottom:"20px"}}>עריכת פרמטרי חישוב</div>
+            <label style={{...S.label,marginTop:0}}>הלוך-חזור לעבודה (ק"מ ביום)</label>
             <input style={S.input} type="number" value={settingsForm.commute}
               onChange={e=>setSettingsForm({...settingsForm,commute:e.target.value})}/>
             <label style={S.label}>תקציב שנתי (ק"מ)</label>
             <input style={S.input} type="number" value={settingsForm.yearlyBudget}
               onChange={e=>setSettingsForm({...settingsForm,yearlyBudget:e.target.value})}/>
-            <button className="btn-main" style={S.btn} onClick={handleSaveSettings}>שמור</button>
+            <button className="btn-main" style={S.btn} onClick={handleSaveSettings}>שמור שינויים</button>
             {"Notification" in window && Notification.permission!=="granted" && (
-              <button className="btn-main" style={{...S.btn,marginTop:"8px",backgroundImage:"linear-gradient(135deg,#92400e,#c2410c)"}}
+              <button className="btn-main" style={{...S.btn,marginTop:"8px",background:"linear-gradient(135deg,#92400e,#fb923c)"}}
                 onClick={()=>Notification.requestPermission().then(p=>{
                   if(p==="granted"){showToast("התראות מופעלות ✓");syncStateToSW(appData,null);}
                   else showToast("לא ניתנה הרשאה",cl.red);
                 })}>
-                🔔 הפעל התראות פוש
+                🔔 הפעל התראות
               </button>
             )}
             {"Notification" in window && Notification.permission==="granted" && (
               <div style={{marginTop:"10px",fontSize:"12px",color:cl.green,textAlign:"center",fontWeight:600}}>✓ התראות פוש מופעלות</div>
             )}
-            <button style={{...S.btn,marginTop:"8px",background:"transparent",color:cl.muted,border:`1px solid ${cl.border}`}}
-              onClick={()=>setShowSettings(false)}>ביטול</button>
+            <button style={{...S.btnGhost,width:"100%",marginTop:"8px",justifyContent:"center",display:"flex",padding:"12px"}}
+              className="btn-ghost" onClick={()=>setShowSettings(false)}>ביטול</button>
           </div>
         </div>
       )}
 
-      {toast && <div className="toast-anim" style={{position:"fixed",bottom:20,left:"50%",transform:"translateX(-50%)",background:toast.color,color:"#fff",padding:"10px 22px",borderRadius:"24px",fontSize:"14px",fontWeight:700,boxShadow:"0 4px 16px rgba(0,0,0,0.18)"}}>{toast.msg}</div>}
+      {toast && <div className="toast-anim" style={{position:"fixed",bottom:28,left:"50%",transform:"translateX(-50%)",background:toast.color,color:"#fff",padding:"11px 24px",borderRadius:"28px",fontSize:"14px",fontWeight:700,boxShadow:`0 8px 32px ${toast.color}66`,whiteSpace:"nowrap"}}>{toast.msg}</div>}
       <div style={{position:"fixed",bottom:0,left:0,right:0,textAlign:"center",fontSize:"11px",color:cl.muted,padding:"6px 0 8px",background:cl.bg,borderTop:`1px solid ${cl.border}`}}>made by illouzman</div>
     </div>
   );

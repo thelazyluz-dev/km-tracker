@@ -137,7 +137,8 @@ export default function App() {
 
   const lastM = new Date(today.getFullYear(),today.getMonth()-1,1);
   const [uf, setUf] = useState({year:lastM.getFullYear(),month:lastM.getMonth(),odometer:"",dayOverrides:{},dailyLogs:{}});
-  const [dailyLog, setDailyLog] = useState({date:todayISO,odo:""});
+  const [dayModal, setDayModal] = useState(null); // {iso, year, month, d}
+  const [modalOdo, setModalOdo] = useState("");
 
   useEffect(()=>{
     const d=loadData();
@@ -269,25 +270,44 @@ export default function App() {
     return {totalKm,workKm,personal,latestDate};
   },[uf.dailyLogs,uf.year,uf.month,uf.dayOverrides,appData,getPrevOdo]);
 
-  function saveDailyLog(){
-    if(!dailyLog.odo) return;
-    const mk=mKey(uf.year,uf.month);
-    const ex=migrateEntry(appData?.months?.[mk])||{dayOverrides:{}};
-    const updated={...ex,dailyLogs:{...(ex.dailyLogs||{}),[dailyLog.date]:Number(dailyLog.odo)}};
-    persist({...appData,months:{...(appData.months||{}),[mk]:updated}});
-    setUf(prev=>({...prev,dailyLogs:{...(prev.dailyLogs||{}),[dailyLog.date]:Number(dailyLog.odo)}}));
-    setDailyLog(l=>({...l,odo:""}));
-    showToast("נשמר ✓ — ראה סטטוס חי למטה",cl.green);
+  function openDayModal(iso, year, month, d){
+    const existing = (uf.dailyLogs||{})[iso];
+    setModalOdo(existing ? String(existing) : "");
+    setDayModal({iso, year, month, d});
   }
 
-  function deleteDailyLog(date){
-    const mk=mKey(uf.year,uf.month);
-    const ex=migrateEntry(appData?.months?.[mk])||{dayOverrides:{}};
-    const newLogs={...(ex.dailyLogs||{})};
-    delete newLogs[date];
-    persist({...appData,months:{...(appData.months||{}),[mk]:{...ex,dailyLogs:newLogs}}});
-    setUf(prev=>{const l={...(prev.dailyLogs||{})};delete l[date];return {...prev,dailyLogs:l};});
-    showToast("נמחק",cl.red);
+  function saveDayModal(newState){
+    if(!dayModal) return;
+    const {iso, year, month, d} = dayModal;
+    const mk = mKey(year, month);
+    // update dayOverrides
+    const def = getDefaultState(iso, year, month, d);
+    const newOv = {...uf.dayOverrides};
+    if(newState === def) delete newOv[iso]; else newOv[iso] = newState;
+    // update dailyLogs
+    const newLogs = {...(uf.dailyLogs||{})};
+    if(modalOdo) newLogs[iso] = Number(modalOdo);
+    else delete newLogs[iso];
+    // persist
+    const ex = migrateEntry(appData?.months?.[mk]) || {dayOverrides:{}};
+    const updated = {...ex, dayOverrides: newOv, dailyLogs: newLogs};
+    persist({...appData, months:{...(appData.months||{}), [mk]: updated}});
+    setUf(prev => ({...prev, dayOverrides: newOv, dailyLogs: newLogs}));
+    setDayModal(null);
+    showToast("נשמר ✓", cl.green);
+  }
+
+  function deleteDayOdo(){
+    if(!dayModal) return;
+    const {iso, year, month} = dayModal;
+    const mk = mKey(year, month);
+    const newLogs = {...(uf.dailyLogs||{})};
+    delete newLogs[iso];
+    const ex = migrateEntry(appData?.months?.[mk]) || {dayOverrides:{}};
+    persist({...appData, months:{...(appData.months||{}), [mk]: {...ex, dailyLogs: newLogs}}});
+    setUf(prev => ({...prev, dailyLogs: newLogs}));
+    setModalOdo("");
+    showToast("נמחק", cl.red);
   }
 
   function handleSetup(){
@@ -458,22 +478,25 @@ export default function App() {
             const holiday=HOLIDAYS[iso];
             const isToday=iso===toISO(new Date().getFullYear(),new Date().getMonth(),new Date().getDate());
 
+            const hasOdo = !!(uf.dailyLogs||{})[iso];
             return(
-              <div key={i} className="day-cell" onClick={()=>cycleDay(iso,year,month,d)}
+              <div key={i} className="day-cell" onClick={()=>openDayModal(iso,year,month,d)}
                 style={{textAlign:"center",padding:"4px 2px",borderRadius:"8px",background:cfg.bg,
-                  border:`1px solid ${isToday?cl.accent:cfg.border}`,
+                  border:`1px solid ${isToday?cl.accent:hasOdo?"rgba(251,191,36,0.5)":cfg.border}`,
                   color:cfg.color,cursor:"pointer",height:"44px",overflow:"hidden",
                   display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:"1px"}}>
                 <span style={{fontSize:"13px",fontWeight:700,lineHeight:1}}>{d}</span>
-                {holiday
-                  ? <span style={{fontSize:"6px",fontWeight:700,lineHeight:"1.1",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",paddingInline:"2px",opacity:0.9}}>{holiday}</span>
-                  : <span style={{fontSize:"10px",lineHeight:1}}>{cfg.icon}</span>
+                {hasOdo
+                  ? <span style={{fontSize:"8px",lineHeight:1,color:cl.yellow}}>📍</span>
+                  : holiday
+                    ? <span style={{fontSize:"6px",fontWeight:700,lineHeight:"1.1",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",paddingInline:"2px",opacity:0.9}}>{holiday}</span>
+                    : <span style={{fontSize:"10px",lineHeight:1}}>{cfg.icon}</span>
                 }
               </div>
             );
           })}
         </div>
-        <p style={{fontSize:"11px",color:cl.muted,margin:"10px 0 0",textAlign:"center"}}>א׳–ה׳: לחץ לסבב 🚗↔🏠 | חג: 🟡→🚗→🏠</p>
+        <p style={{fontSize:"11px",color:cl.muted,margin:"10px 0 0",textAlign:"center"}}>לחץ על יום לעדכון ומד ק״מ</p>
       </div>
     );
   }
@@ -675,46 +698,16 @@ export default function App() {
               </div>
             )}
 
-            {/* Daily log */}
-            <div style={{marginTop:"22px",paddingTop:"18px",borderTop:`1px solid ${cl.border}`}}>
-              <div style={{...S.sectionTitle,marginBottom:"4px"}}>סטטוס חי — איפה אני עכשיו?</div>
-              <div style={{fontSize:"12px",color:cl.muted,marginBottom:"12px",lineHeight:"1.5"}}>הזן קריאת מד של היום כדי לראות כמה ק״מ פרטי נסעת עד כה החודש</div>
-              <label style={{...S.label,marginTop:0,color:cl.muted2}}>תאריך</label>
-              <input style={S.input} type="date"
-                value={dailyLog.date}
-                min={toISO(uf.year,uf.month,1)}
-                max={toISO(uf.year,uf.month,daysInMonth(uf.year,uf.month))}
-                onChange={e=>setDailyLog(l=>({...l,date:e.target.value}))}/>
-              <label style={{...S.label,color:cl.muted2}}>קריאת מד (ק״מ)</label>
-              <input style={S.input} type="number" placeholder="למשל: 47500"
-                value={dailyLog.odo}
-                onChange={e=>setDailyLog(l=>({...l,odo:e.target.value}))}/>
-              <button className="btn-main" style={{...S.btn,marginTop:"12px"}} onClick={saveDailyLog}>שמור קריאה יומית ✓</button>
-
-              {Object.keys(uf.dailyLogs||{}).length>0&&(
-                <div style={{marginTop:"14px",display:"flex",flexDirection:"column",gap:"6px"}}>
-                  <div style={{fontSize:"10px",fontWeight:700,color:cl.muted,textTransform:"uppercase",letterSpacing:"1px",marginBottom:"2px"}}>הזנות שמורות</div>
-                  {Object.entries(uf.dailyLogs||{}).sort().reverse().map(([date,odo])=>(
-                    <div key={date} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"11px 14px",background:cl.surface2,borderRadius:"10px",border:`1px solid ${cl.border}`}}>
-                      <span style={{color:cl.muted2,fontSize:"13px"}}>{date}</span>
-                      <span style={{color:cl.text,fontWeight:700,fontSize:"14px"}}>{Number(odo).toLocaleString()} ק״מ</span>
-                      <button onClick={()=>deleteDailyLog(date)}
-                        style={{background:"none",border:"none",cursor:"pointer",color:cl.red,fontSize:"16px",padding:"0 2px",lineHeight:1}}>🗑</button>
-                    </div>
-                  ))}
+            {liveFromLogs&&(
+              <div style={{marginTop:"14px",padding:"14px",background:"rgba(52,211,153,0.07)",borderRadius:"12px",border:"1px solid rgba(52,211,153,0.2)"}}>
+                <div style={{fontSize:"10px",color:cl.green,textTransform:"uppercase",letterSpacing:"1px",marginBottom:"8px",fontWeight:700}}>סטטוס חי · {liveFromLogs.latestDate}</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"8px",textAlign:"center"}}>
+                  <div><div style={{fontSize:"18px",fontWeight:800,color:cl.text}}>{liveFromLogs.totalKm}</div><div style={{fontSize:"10px",color:cl.muted}}>סה״כ</div></div>
+                  <div><div style={{fontSize:"18px",fontWeight:800,color:cl.blue}}>{liveFromLogs.workKm}</div><div style={{fontSize:"10px",color:cl.muted}}>עבודה</div></div>
+                  <div><div style={{fontSize:"18px",fontWeight:800,color:liveFromLogs.personal>annual?.allowance?cl.orange:cl.green}}>{liveFromLogs.personal}</div><div style={{fontSize:"10px",color:cl.muted}}>פרטי</div></div>
                 </div>
-              )}
-              {liveFromLogs&&(
-                <div style={{marginTop:"12px",padding:"14px",background:"rgba(52,211,153,0.07)",borderRadius:"12px",border:"1px solid rgba(52,211,153,0.2)"}}>
-                  <div style={{fontSize:"10px",color:cl.green,textTransform:"uppercase",letterSpacing:"1px",marginBottom:"8px",fontWeight:700}}>סטטוס חי · {liveFromLogs.latestDate}</div>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"8px",textAlign:"center"}}>
-                    <div><div style={{fontSize:"18px",fontWeight:800,color:cl.text}}>{liveFromLogs.totalKm}</div><div style={{fontSize:"10px",color:cl.muted}}>סה״כ</div></div>
-                    <div><div style={{fontSize:"18px",fontWeight:800,color:cl.blue}}>{liveFromLogs.workKm}</div><div style={{fontSize:"10px",color:cl.muted}}>עבודה</div></div>
-                    <div><div style={{fontSize:"18px",fontWeight:800,color:liveFromLogs.personal>annual?.allowance?cl.orange:cl.green}}>{liveFromLogs.personal}</div><div style={{fontSize:"10px",color:cl.muted}}>פרטי</div></div>
-                  </div>
-                </div>
-              )}
-            </div>
+              </div>
+            )}
 
             <button className="btn-main" style={S.btn} onClick={handleSave}>שמור עדכון ✓</button>
           </div>
@@ -814,6 +807,72 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {dayModal && (()=>{
+        const {iso, year, month, d} = dayModal;
+        const state = getEffectiveState(iso, year, month, d, uf.dayOverrides);
+        const holiday = HOLIDAYS[iso];
+        const dayName = DAY_HE[dowOf(year, month, d)];
+        const STATE_CFG_MODAL = {
+          work:    {label:"עבדתי",     icon:"🚗", color:cl.green,  bg:"rgba(52,211,153,0.15)",  border:"rgba(52,211,153,0.4)"},
+          off:     {label:"לא עבדתי", icon:"🏠", color:cl.red,    bg:"rgba(248,113,113,0.15)", border:"rgba(248,113,113,0.4)"},
+          holiday: {label:"חג / חופש",icon:"🟡", color:cl.yellow, bg:"rgba(251,191,36,0.13)",  border:"rgba(251,191,36,0.35)"},
+        };
+        return(
+          <div className="modal-overlay-anim" onClick={()=>setDayModal(null)}
+            style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",backdropFilter:"blur(6px)",zIndex:200,display:"flex",alignItems:"flex-end",direction:"rtl"}}>
+            <div className="modal-card-anim" onClick={e=>e.stopPropagation()}
+              style={{width:"100%",background:cl.surface,borderRadius:"24px 24px 0 0",padding:"24px 20px 36px",border:`1px solid ${cl.border}`,borderBottom:"none"}}>
+              {/* handle */}
+              <div style={{width:"40px",height:"4px",background:"rgba(255,255,255,0.15)",borderRadius:"2px",margin:"0 auto 20px"}}/>
+              {/* date header */}
+              <div style={{display:"flex",alignItems:"center",gap:"10px",marginBottom:"20px"}}>
+                <div style={{background:cl.surface2,borderRadius:"12px",padding:"10px 14px",textAlign:"center",minWidth:"50px",border:`1px solid ${cl.border}`}}>
+                  <div style={{fontSize:"22px",fontWeight:800,color:cl.text,lineHeight:1}}>{d}</div>
+                  <div style={{fontSize:"10px",color:cl.muted,marginTop:"3px"}}>{dayName}</div>
+                </div>
+                <div>
+                  <div style={{fontSize:"16px",fontWeight:700,color:cl.text}}>{MONTH_HE[month]} {year}</div>
+                  {holiday && <div style={{fontSize:"12px",color:cl.yellow,marginTop:"3px"}}>{holiday}</div>}
+                </div>
+              </div>
+              {/* state toggle */}
+              <div style={{fontSize:"11px",fontWeight:700,color:cl.muted,textTransform:"uppercase",letterSpacing:"1px",marginBottom:"8px"}}>סטטוס יום</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"8px",marginBottom:"20px"}}>
+                {Object.entries(STATE_CFG_MODAL).map(([k,c])=>(
+                  <button key={k} onClick={()=>saveDayModal(k)}
+                    style={{padding:"12px 6px",borderRadius:"12px",border:`2px solid ${state===k?c.border:"transparent"}`,
+                      background:state===k?c.bg:cl.surface2,cursor:"pointer",textAlign:"center",
+                      transition:"all 0.15s",outline:"none",fontFamily:"inherit"}}>
+                    <div style={{fontSize:"20px",marginBottom:"4px"}}>{c.icon}</div>
+                    <div style={{fontSize:"11px",fontWeight:700,color:state===k?c.color:cl.muted}}>{c.label}</div>
+                  </button>
+                ))}
+              </div>
+              {/* odometer input */}
+              <div style={{fontSize:"11px",fontWeight:700,color:cl.muted,textTransform:"uppercase",letterSpacing:"1px",marginBottom:"8px"}}>קריאת מד (אופציונלי)</div>
+              <div style={{display:"flex",gap:"8px",alignItems:"center"}}>
+                <input style={{...S.input,flex:1,fontSize:"18px",padding:"14px 16px"}}
+                  type="number" placeholder="למשל: 47500"
+                  value={modalOdo} onChange={e=>setModalOdo(e.target.value)}/>
+                {modalOdo&&(
+                  <button onClick={()=>setModalOdo("")}
+                    style={{background:cl.redBg,border:`1px solid rgba(248,113,113,0.3)`,borderRadius:"10px",padding:"12px",cursor:"pointer",color:cl.red,fontSize:"16px",lineHeight:1}}>✕</button>
+                )}
+              </div>
+              <p style={{fontSize:"12px",color:cl.muted,margin:"8px 0 20px",lineHeight:"1.5"}}>
+                הזן את מד הק״מ הנוכחי כדי לקבל סטטוס חי של ק״מ פרטי עד היום
+              </p>
+              <div style={{display:"flex",gap:"10px"}}>
+                <button className="btn-main" style={{...S.btn,marginTop:0,flex:1}}
+                  onClick={()=>saveDayModal(state)}>שמור ✓</button>
+                <button style={{...S.btnGhost,padding:"14px 18px",fontSize:"14px"}}
+                  className="btn-ghost" onClick={()=>setDayModal(null)}>ביטול</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {toast && <div className="toast-anim" style={{position:"fixed",bottom:28,left:"50%",transform:"translateX(-50%)",background:toast.color,color:"#fff",padding:"11px 24px",borderRadius:"28px",fontSize:"14px",fontWeight:700,boxShadow:`0 8px 32px ${toast.color}66`,whiteSpace:"nowrap"}}>{toast.msg}</div>}
       <div style={{position:"fixed",bottom:0,left:0,right:0,textAlign:"center",fontSize:"9px",color:"rgba(240,238,248,0.2)",padding:"5px 0 7px",background:cl.bg,borderTop:`1px solid ${cl.border}`}}>made by illouzman</div>

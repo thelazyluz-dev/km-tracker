@@ -1,7 +1,7 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 
-const YEARLY_BUDGET = 8400;
 const KEY = "km_v5";
+const DEFAULT_BUDGET = 8400;
 const MONTH_HE = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
 const DAY_HE   = ["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"];
 
@@ -13,6 +13,10 @@ const HOLIDAYS = {
   "2026-04-22":"יום העצמאות","2026-05-21":"שבועות","2026-09-20":"ראש השנה א׳",
   "2026-09-21":"ראש השנה ב׳","2026-09-29":"יום כיפור","2026-10-04":"סוכות",
   "2026-10-11":"שמיני עצרת",
+  "2027-03-23":"פורים","2027-04-21":"פסח א׳","2027-04-27":"פסח ז׳",
+  "2027-05-11":"יום העצמאות","2027-06-11":"שבועות","2027-09-11":"ראש השנה א׳",
+  "2027-09-12":"ראש השנה ב׳","2027-09-20":"יום כיפור","2027-09-25":"סוכות",
+  "2027-10-02":"שמיני עצרת",
 };
 
 function daysInMonth(y,m)  { return new Date(y,m+1,0).getDate(); }
@@ -78,8 +82,10 @@ export default function App() {
   const [screen,  setScreen]  = useState("loading");
   const [tab,     setTab]     = useState("dashboard");
   const [toast,   setToast]   = useState(null);
+  const [showSettings, setShowSettings] = useState(false);
+  const [settingsForm, setSettingsForm] = useState({commute:"",yearlyBudget:""});
 
-  const [sf, setSf] = useState({yearStart:`${today.getFullYear()}-01-01`,startOdo:"",commute:"62"});
+  const [sf, setSf] = useState({yearStart:`${today.getFullYear()}-01-01`,startOdo:"",commute:"62",yearlyBudget:String(DEFAULT_BUDGET)});
 
   const lastM = new Date(today.getFullYear(),today.getMonth()-1,1);
   const [uf, setUf] = useState({year:lastM.getFullYear(),month:lastM.getMonth(),odometer:"",offDays:[],note:""});
@@ -97,7 +103,7 @@ export default function App() {
     setTimeout(()=>setToast(null),2500);
   }
 
-  function getPrevOdo(year,month){
+  const getPrevOdo = useCallback((year,month)=>{
     if(!appData?.setup) return 0;
     const months=getYearMonths(appData.setup.yearStart);
     let prev=appData.setup.startOdometer;
@@ -106,9 +112,9 @@ export default function App() {
       if(appData.months?.[key]?.odometer) prev=appData.months[key].odometer;
     }
     return prev;
-  }
+  },[appData]);
 
-  function calcMonth(year,month){
+  const calcMonth = useCallback((year,month)=>{
     const mk=mKey(year,month);
     const entry=appData?.months?.[mk];
     if(!entry?.odometer) return null;
@@ -118,7 +124,7 @@ export default function App() {
     const workKm=workDays*(appData.setup.commute||62);
     const personal=Math.max(0,totalKm-workKm);
     return {totalKm,workDays,workKm,personal,odometer:entry.odometer,note:entry.note,offDays:entry.offDays||[]};
-  }
+  },[appData,getPrevOdo]);
 
   const annual=useMemo(()=>{
     if(!appData?.setup) return null;
@@ -129,12 +135,14 @@ export default function App() {
       const s=calcMonth(year,month);
       if(s){totalPersonal+=s.personal;byMonth[key]=s;}
     }
-    const remaining=Math.max(0,YEARLY_BUDGET-totalPersonal);
+    const budget=appData.setup.yearlyBudget||DEFAULT_BUDGET;
+    const remaining=Math.max(0,budget-totalPersonal);
     const monthsLeft=months.filter(m=>m.key>=todayKey).length;
     const allowance=monthsLeft>0?Math.round(remaining/monthsLeft):0;
-    const pct=Math.min(100,Math.round(totalPersonal/YEARLY_BUDGET*100));
-    return {totalPersonal,remaining,monthsLeft,allowance,pct,byMonth,months};
-  },[appData,todayKey]);
+    const pct=Math.min(100,Math.round(totalPersonal/budget*100));
+    const maxPersonal=Math.max(1,...Object.values(byMonth).map(s=>s.personal));
+    return {totalPersonal,remaining,monthsLeft,allowance,pct,byMonth,months,budget,maxPersonal};
+  },[appData,todayKey,calcMonth]);
 
   const livePreview=useMemo(()=>{
     if(!appData?.setup||!uf.odometer) return null;
@@ -145,22 +153,37 @@ export default function App() {
     const workKm=workDays*(appData.setup.commute||62);
     const personal=Math.max(0,totalKm-workKm);
     return {totalKm,workDays,workKm,personal,prevOdo};
-  },[uf.odometer,uf.offDays,uf.year,uf.month,appData]);
+  },[uf.odometer,uf.offDays,uf.year,uf.month,appData,getPrevOdo]);
 
   function handleSetup(){
     if(!sf.startOdo||!sf.commute||!sf.yearStart) return;
-    const d={setup:{yearStart:sf.yearStart,startOdometer:Number(sf.startOdo),commute:Number(sf.commute)},months:{}};
+    const d={setup:{yearStart:sf.yearStart,startOdometer:Number(sf.startOdo),commute:Number(sf.commute),yearlyBudget:Number(sf.yearlyBudget)||DEFAULT_BUDGET},months:{}};
     persist(d);
     setScreen("main");
     showToast("ההגדרות נשמרו ✓");
   }
 
+  function handleSaveSettings(){
+    if(!settingsForm.commute||!settingsForm.yearlyBudget) return;
+    const newData={
+      ...appData,
+      setup:{...appData.setup,commute:Number(settingsForm.commute),yearlyBudget:Number(settingsForm.yearlyBudget)||DEFAULT_BUDGET}
+    };
+    persist(newData);
+    setShowSettings(false);
+    showToast("ההגדרות עודכנו ✓");
+  }
+
   function handleSave(){
     if(!uf.odometer) return;
-    const prevOdo = getPrevOdo(uf.year, uf.month);
-    if (Number(uf.odometer) < prevOdo) {
-        alert("קריאת המד לא יכולה להיות קטנה מהקריאה הקודמת (" + prevOdo + ")");
-        return;
+    const prevOdo=getPrevOdo(uf.year,uf.month);
+    if(Number(uf.odometer)<prevOdo){
+      alert("קריאת המד לא יכולה להיות קטנה מהקריאה הקודמת ("+prevOdo+")");
+      return;
+    }
+    if(livePreview&&annual&&annual.allowance>0&&livePreview.personal>annual.allowance*1.2){
+      const ok=window.confirm(`ק"מ פרטיים (${livePreview.personal}) חורגים ב-20% מהמכסה החודשית (${annual.allowance}).\nלשמור בכל זאת?`);
+      if(!ok) return;
     }
     const mk=mKey(uf.year,uf.month);
     const newData={
@@ -179,6 +202,16 @@ export default function App() {
     setTab("update");
   }
 
+  function navigateMonth(dir){
+    setUf(prev=>{
+      const d=new Date(prev.year,prev.month+dir,1);
+      const y=d.getFullYear(),m=d.getMonth();
+      const mk=mKey(y,m);
+      const ex=appData?.months?.[mk];
+      return {year:y,month:m,odometer:ex?.odometer?.toString()||"",offDays:ex?.offDays||[],note:ex?.note||""};
+    });
+  }
+
   function toggleOffDay(iso){
     setUf(prev=>({...prev,offDays:prev.offDays.includes(iso)?prev.offDays.filter(d=>d!==iso):[...prev.offDays,iso]}));
   }
@@ -189,6 +222,24 @@ export default function App() {
     setAppData(null);
     setScreen("setup");
     setTab("dashboard");
+  }
+
+  function exportCSV(){
+    if(!annual) return;
+    const rows=[["חודש","ימי עבודה","ק\"מ עבודה","ק\"מ פרטי","סה\"כ ק\"מ","הערה"]];
+    for(const {year,month,key} of annual.months){
+      const s=annual.byMonth[key];
+      if(!s) continue;
+      rows.push([`${MONTH_HE[month]} ${year}`,s.workDays,s.workKm,s.personal,s.totalKm,`"${(s.note||"").replace(/"/g,'""')}"`]);
+    }
+    const csv="\uFEFF"+rows.map(r=>r.join(",")).join("\n");
+    const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    a.href=url;
+    a.download=`km-tracker-${appData.setup.yearStart}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   if(screen==="loading") return null;
@@ -212,6 +263,8 @@ export default function App() {
           <input style={S.input} type="number" value={sf.startOdo} onChange={e=>setSf({...sf,startOdo:e.target.value})}/>
           <label style={S.label}>הלוך-חזור לעבודה (ק"מ ביום)</label>
           <input style={S.input} type="number" value={sf.commute} onChange={e=>setSf({...sf,commute:e.target.value})}/>
+          <label style={S.label}>תקציב ק"מ פרטי שנתי</label>
+          <input style={S.input} type="number" value={sf.yearlyBudget} onChange={e=>setSf({...sf,yearlyBudget:e.target.value})}/>
           <button style={S.btn} onClick={handleSetup}>התחל מעקב ←</button>
         </div>
       </div>
@@ -264,8 +317,8 @@ export default function App() {
           const s=annual.byMonth[key];
           const isCurr=key===todayKey;
           let bg=cl.border, textC=cl.muted;
-          if(s) { bg=s.personal>700?cl.redBg:cl.greenBg; textC=s.personal>700?cl.red:cl.green; }
-          else if(isCurr) { bg=cl.yellowBg; textC=cl.yellow; }
+          if(s){ bg=s.personal>annual.allowance*1.2?cl.redBg:cl.greenBg; textC=s.personal>annual.allowance*1.2?cl.red:cl.green; }
+          else if(isCurr){ bg=cl.yellowBg; textC=cl.yellow; }
 
           return(
             <div key={key} onClick={()=>openUpdate(year,month)}
@@ -278,12 +331,40 @@ export default function App() {
     );
   }
 
+  function renderBarChart(){
+    if(!annual) return null;
+    const barColor=(p)=>p>annual.allowance*1.2?cl.red:p>annual.allowance?cl.orange:cl.green;
+    return(
+      <div style={{display:"flex",alignItems:"flex-end",gap:"4px",height:"90px",paddingTop:"10px"}}>
+        {annual.months.map(({year,month,key})=>{
+          const s=annual.byMonth[key];
+          const isCurr=key===todayKey;
+          const barH=s?Math.max(4,Math.round((s.personal/annual.maxPersonal)*70)):0;
+          return(
+            <div key={key} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:"2px"}}>
+              <div style={{width:"100%",height:`${barH}px`,background:s?barColor(s.personal):cl.border,borderRadius:"3px 3px 0 0",outline:isCurr?`2px solid ${cl.text}`:"none"}}/>
+              <div style={{fontSize:"9px",color:isCurr?cl.text:cl.muted,fontWeight:isCurr?700:"normal"}}>
+                {MONTH_HE[month].slice(0,3)}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
   return(
     <div style={S.page}>
       <div style={S.wrap}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",paddingBottom:"18px",marginBottom:"16px",borderBottom:`2px solid ${cl.text}`}}>
           <div style={S.h1}>🚗 מד ק"מ</div>
-          <button style={S.btnGhost} onClick={doReset}>איפוס</button>
+          <div style={{display:"flex",gap:"8px"}}>
+            <button style={S.btnGhost} onClick={()=>{
+              setSettingsForm({commute:String(appData.setup.commute),yearlyBudget:String(appData.setup.yearlyBudget||DEFAULT_BUDGET)});
+              setShowSettings(true);
+            }}>⚙️ הגדרות</button>
+            <button style={S.btnGhost} onClick={doReset}>איפוס</button>
+          </div>
         </div>
 
         <div style={S.tabs}>
@@ -299,6 +380,7 @@ export default function App() {
               <div style={{fontSize:"54px",fontWeight:800,color:annual.remaining<1000?cl.red:cl.green}}>
                 {annual.remaining.toLocaleString()}
               </div>
+              <div style={{fontSize:"13px",color:cl.muted,marginTop:"4px"}}>מתוך {annual.budget.toLocaleString()} ק"מ שנתי</div>
               <div style={{background:cl.border,borderRadius:"4px",height:"6px",marginTop:"14px"}}>
                 <div style={{width:`${annual.pct}%`,height:"100%",borderRadius:"4px",background:annual.pct>90?cl.red:cl.green}}/>
               </div>
@@ -306,6 +388,10 @@ export default function App() {
             <div style={S.card}>
               <div style={S.sectionTitle}>מכסה מחושבת לחודש</div>
               <div style={{fontSize:"42px",fontWeight:800}}>{annual.allowance.toLocaleString()}</div>
+            </div>
+            <div style={S.card}>
+              <div style={S.sectionTitle}>ק"מ פרטי לפי חודש</div>
+              {renderBarChart()}
             </div>
             <div style={S.card}>
               <div style={S.sectionTitle}>ציר זמן שנתי</div>
@@ -316,18 +402,31 @@ export default function App() {
 
         {tab==="update" && (
           <div style={S.card}>
-            <div style={S.sectionTitle}>עדכון {MONTH_HE[uf.month]} {uf.year}</div>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"14px"}}>
+              <button style={S.btnGhost} onClick={()=>navigateMonth(-1)}>→</button>
+              <div style={{...S.sectionTitle,margin:0}}>{MONTH_HE[uf.month]} {uf.year}</div>
+              <button style={S.btnGhost} onClick={()=>navigateMonth(1)}>←</button>
+            </div>
             <label style={S.label}>קריאת מד נוכחית</label>
             <input style={S.input} type="number" value={uf.odometer} onChange={e=>setUf({...uf,odometer:e.target.value})}/>
 
             <label style={S.label}>ימים שלא נסעת לעבודה</label>
             {renderCalendar()}
 
+            <label style={{...S.label,marginTop:"14px"}}>הערה (אופציונלי)</label>
+            <textarea
+              style={{...S.input,height:"68px",resize:"vertical",lineHeight:"1.5"}}
+              value={uf.note}
+              onChange={e=>setUf({...uf,note:e.target.value})}
+              placeholder="למשל: נסיעה מיוחדת, ביקור אצל לקוח..."
+            />
+
             {livePreview && (
-                <div style={{marginTop:"15px", padding:"12px", background:cl.bg, borderRadius:"8px", fontSize:"14px"}}>
-                    <div>סה"כ ק"מ: <strong>{livePreview.totalKm}</strong></div>
-                    <div>פרטי: <strong style={{color:cl.blue}}>{livePreview.personal}</strong></div>
-                </div>
+              <div style={{marginTop:"15px",padding:"12px",background:cl.bg,borderRadius:"8px",fontSize:"14px",display:"flex",gap:"16px"}}>
+                <div>סה"כ: <strong>{livePreview.totalKm}</strong> ק"מ</div>
+                <div>עבודה: <strong>{livePreview.workKm}</strong> ק"מ</div>
+                <div>פרטי: <strong style={{color:annual&&livePreview.personal>annual.allowance?cl.orange:cl.blue}}>{livePreview.personal}</strong> ק"מ</div>
+              </div>
             )}
 
             <button style={S.btn} onClick={handleSave}>שמור עדכון</button>
@@ -336,20 +435,52 @@ export default function App() {
 
         {tab==="history" && (
           <div style={S.card}>
-            <div style={S.sectionTitle}>היסטוריית נסיעות</div>
-            {annual.months.map(m => {
-                const s = annual.byMonth[m.key];
-                if (!s) return null;
-                return (
-                    <div key={m.key} style={S.row}>
-                        <span><strong>{MONTH_HE[m.month]}</strong></span>
-                        <span>{s.totalKm} ק"מ (פרטי: {s.personal})</span>
-                    </div>
-                );
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px"}}>
+              <div style={{...S.sectionTitle,margin:0}}>היסטוריית נסיעות</div>
+              <button style={S.btnGhost} onClick={exportCSV}>⬇ CSV</button>
+            </div>
+            {annual.months.map(m=>{
+              const s=annual.byMonth[m.key];
+              if(!s) return null;
+              const isOver=annual.allowance>0&&s.personal>annual.allowance*1.2;
+              return(
+                <div key={m.key} style={{...S.row,flexDirection:"column",alignItems:"flex-start",gap:"6px"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",width:"100%",alignItems:"center"}}>
+                    <strong>{MONTH_HE[m.month]} {m.year}</strong>
+                    <span style={S.badge(isOver?cl.red:cl.green,isOver?cl.redBg:cl.greenBg)}>
+                      פרטי: {s.personal} ק"מ
+                    </span>
+                  </div>
+                  <div style={{fontSize:"12px",color:cl.muted,display:"flex",gap:"14px"}}>
+                    <span>ימי עבודה: {s.workDays}</span>
+                    <span>עבודה: {s.workKm} ק"מ</span>
+                    <span>סה"כ: {s.totalKm} ק"מ</span>
+                  </div>
+                  {s.note&&<div style={{fontSize:"12px",color:cl.muted,fontStyle:"italic"}}>{s.note}</div>}
+                </div>
+              );
             })}
           </div>
         )}
       </div>
+
+      {showSettings && (
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:100,padding:"20px",direction:"rtl"}}>
+          <div style={{...S.card,width:"100%",maxWidth:"360px",marginBottom:0}}>
+            <div style={{...S.sectionTitle,marginBottom:"16px"}}>עריכת הגדרות</div>
+            <label style={S.label}>הלוך-חזור לעבודה (ק"מ ביום)</label>
+            <input style={S.input} type="number" value={settingsForm.commute}
+              onChange={e=>setSettingsForm({...settingsForm,commute:e.target.value})}/>
+            <label style={S.label}>תקציב שנתי (ק"מ)</label>
+            <input style={S.input} type="number" value={settingsForm.yearlyBudget}
+              onChange={e=>setSettingsForm({...settingsForm,yearlyBudget:e.target.value})}/>
+            <button style={S.btn} onClick={handleSaveSettings}>שמור</button>
+            <button style={{...S.btn,marginTop:"8px",background:"transparent",color:cl.muted,border:`1px solid ${cl.border}`}}
+              onClick={()=>setShowSettings(false)}>ביטול</button>
+          </div>
+        </div>
+      )}
+
       {toast && <div style={{position:"fixed",bottom:20,left:"50%",transform:"translateX(-50%)",background:toast.color,color:"#fff",padding:"10px 20px",borderRadius:"20px",fontSize:"14px",fontWeight:700}}>{toast.msg}</div>}
     </div>
   );

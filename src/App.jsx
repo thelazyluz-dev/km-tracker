@@ -610,7 +610,9 @@ export default function App() {
                 </div>
                 <div style={{fontSize:"14px",color:cl.muted,marginBottom:"6px"}}>ק"מ</div>
               </div>
-              <div style={{fontSize:"12px",color:cl.muted,marginTop:"6px"}}>מחולק שווה בין {annual.monthsLeft} חודשים</div>
+              <div style={{fontSize:"12px",color:cl.muted,marginTop:"6px"}}>
+                יתרת ק״מ מחולקת בין {annual.monthsLeft} חודשים — מהחודש הנוכחי עד סוף השנה
+              </div>
             </div>
             <div className="km-card" style={S.card}>
               <div style={S.sectionTitle}>ק"מ פרטי לפי חודש</div>

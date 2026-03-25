@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
+import "./App.css";
 
 const KEY = "km_v5";
 const DEFAULT_BUDGET = 8400;
@@ -65,9 +66,9 @@ const S = {
   label: {display:"block",fontSize:"12px",fontWeight:600,color:cl.muted,marginBottom:"6px",marginTop:"16px",textTransform:"uppercase",letterSpacing:"0.5px"},
   hint:  {fontSize:"12px",color:cl.muted,marginTop:"5px",lineHeight:"1.5"},
   input: {width:"100%",background:cl.bg,border:`1px solid ${cl.border}`,borderRadius:"8px",color:cl.text,fontSize:"16px",padding:"11px 13px",boxSizing:"border-box",outline:"none",fontFamily:"inherit"},
-  btn:   {width:"100%",marginTop:"16px",padding:"14px",borderRadius:"10px",background:cl.text,color:"#fff",fontWeight:700,fontSize:"15px",border:"none",cursor:"pointer",fontFamily:"inherit",letterSpacing:"0.2px"},
+  btn:   {width:"100%",marginTop:"16px",padding:"14px",borderRadius:"10px",background:cl.text,color:"#fff",fontWeight:700,fontSize:"15px",border:"none",cursor:"pointer",fontFamily:"inherit",letterSpacing:"0.2px",backgroundImage:"linear-gradient(135deg,#1a1917 0%,#343230 100%)"},
   btnGhost: {padding:"8px 14px",borderRadius:"8px",background:"transparent",border:`1px solid ${cl.border}`,color:cl.muted,fontSize:"13px",cursor:"pointer",fontFamily:"inherit"},
-  tab:  (a)=>({flex:1,padding:"10px 4px",background:a?cl.text:"transparent",color:a?"#fff":cl.muted,border:"none",cursor:"pointer",fontWeight:a?700:400,fontSize:"14px",fontFamily:"inherit",borderRadius:"7px",transition:"all 0.15s"}),
+  tab:  (a)=>({flex:1,padding:"10px 4px",background:a?cl.text:"transparent",color:a?"#fff":cl.muted,border:"none",cursor:"pointer",fontWeight:a?700:400,fontSize:"14px",fontFamily:"inherit",borderRadius:"7px"}),
   tabs: {display:"flex",background:cl.bg,borderRadius:"10px",padding:"4px",marginBottom:"16px",border:`1px solid ${cl.border}`},
   row:  {display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:`1px solid ${cl.border}`,fontSize:"14px"},
   badge:(c,bg)=>({display:"inline-flex",alignItems:"center",padding:"4px 10px",borderRadius:"20px",fontSize:"12px",fontWeight:700,color:c,background:bg}),
@@ -265,7 +266,7 @@ export default function App() {
           <input style={S.input} type="number" value={sf.commute} onChange={e=>setSf({...sf,commute:e.target.value})}/>
           <label style={S.label}>תקציב ק"מ פרטי שנתי</label>
           <input style={S.input} type="number" value={sf.yearlyBudget} onChange={e=>setSf({...sf,yearlyBudget:e.target.value})}/>
-          <button style={S.btn} onClick={handleSetup}>התחל מעקב ←</button>
+          <button className="btn-main" style={S.btn} onClick={handleSetup}>התחל מעקב ←</button>
         </div>
       </div>
     </div>
@@ -321,8 +322,8 @@ export default function App() {
           else if(isCurr){ bg=cl.yellowBg; textC=cl.yellow; }
 
           return(
-            <div key={key} onClick={()=>openUpdate(year,month)}
-              style={{padding:"6px 10px",borderRadius:"8px",background:bg,cursor:"pointer",border:isCurr?`2px solid ${cl.text}`:`2px solid transparent`,color:textC,fontSize:"12px",minWidth:"44px",textAlign:"center"}}>
+            <div key={key} className="month-pill" onClick={()=>openUpdate(year,month)}
+              style={{padding:"6px 10px",borderRadius:"10px",background:bg,cursor:"pointer",border:isCurr?`2px solid ${cl.text}`:`2px solid transparent`,color:textC,fontSize:"12px",minWidth:"44px",textAlign:"center",fontWeight:isCurr?700:500}}>
               {MONTH_HE[month].slice(0,3)}
             </div>
           );
@@ -336,13 +337,14 @@ export default function App() {
     const barColor=(p)=>p>annual.allowance*1.2?cl.red:p>annual.allowance?cl.orange:cl.green;
     return(
       <div style={{display:"flex",alignItems:"flex-end",gap:"4px",height:"90px",paddingTop:"10px"}}>
-        {annual.months.map(({year,month,key})=>{
+        {annual.months.map(({year,month,key},i)=>{
           const s=annual.byMonth[key];
           const isCurr=key===todayKey;
           const barH=s?Math.max(4,Math.round((s.personal/annual.maxPersonal)*70)):0;
           return(
             <div key={key} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:"2px"}}>
-              <div style={{width:"100%",height:`${barH}px`,background:s?barColor(s.personal):cl.border,borderRadius:"3px 3px 0 0",outline:isCurr?`2px solid ${cl.text}`:"none"}}/>
+              <div className={s?"bar-seg":undefined}
+                style={{width:"100%",height:`${barH}px`,background:s?barColor(s.personal):cl.border,borderRadius:"4px 4px 0 0",outline:isCurr?`2px solid ${cl.text}`:"none",animationDelay:`${i*0.04}s`}}/>
               <div style={{fontSize:"9px",color:isCurr?cl.text:cl.muted,fontWeight:isCurr?700:"normal"}}>
                 {MONTH_HE[month].slice(0,3)}
               </div>
@@ -369,39 +371,39 @@ export default function App() {
 
         <div style={S.tabs}>
           {[["dashboard","📊 סטטוס"],["update","✏️ עדכון"],["history","📋 היסטוריה"]].map(([k,l])=>(
-            <button key={k} style={S.tab(tab===k)} onClick={()=>setTab(k)}>{l}</button>
+            <button key={k} className="tab-btn" style={S.tab(tab===k)} onClick={()=>setTab(k)}>{l}</button>
           ))}
         </div>
 
         {tab==="dashboard" && (
-          <>
-            <div style={S.card}>
+          <div className="tab-content">
+            <div className="km-card" style={S.card}>
               <div style={S.sectionTitle}>נותר לנסוע השנה</div>
               <div style={{fontSize:"54px",fontWeight:800,color:annual.remaining<1000?cl.red:cl.green}}>
                 {annual.remaining.toLocaleString()}
               </div>
               <div style={{fontSize:"13px",color:cl.muted,marginTop:"4px"}}>מתוך {annual.budget.toLocaleString()} ק"מ שנתי</div>
-              <div style={{background:cl.border,borderRadius:"4px",height:"6px",marginTop:"14px"}}>
-                <div style={{width:`${annual.pct}%`,height:"100%",borderRadius:"4px",background:annual.pct>90?cl.red:cl.green}}/>
+              <div style={{background:cl.border,borderRadius:"6px",height:"10px",marginTop:"14px",overflow:"hidden"}}>
+                <div className="progress-fill" style={{width:`${annual.pct}%`,height:"100%",borderRadius:"6px",background:annual.pct>90?cl.red:cl.green}}/>
               </div>
             </div>
-            <div style={S.card}>
+            <div className="km-card" style={S.card}>
               <div style={S.sectionTitle}>מכסה מחושבת לחודש</div>
               <div style={{fontSize:"42px",fontWeight:800}}>{annual.allowance.toLocaleString()}</div>
             </div>
-            <div style={S.card}>
+            <div className="km-card" style={S.card}>
               <div style={S.sectionTitle}>ק"מ פרטי לפי חודש</div>
               {renderBarChart()}
             </div>
-            <div style={S.card}>
+            <div className="km-card" style={S.card}>
               <div style={S.sectionTitle}>ציר זמן שנתי</div>
               {renderTimeline()}
             </div>
-          </>
+          </div>
         )}
 
         {tab==="update" && (
-          <div style={S.card}>
+          <div className="tab-content km-card" style={S.card}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"14px"}}>
               <button style={S.btnGhost} onClick={()=>navigateMonth(-1)}>→</button>
               <div style={{...S.sectionTitle,margin:0}}>{MONTH_HE[uf.month]} {uf.year}</div>
@@ -429,12 +431,12 @@ export default function App() {
               </div>
             )}
 
-            <button style={S.btn} onClick={handleSave}>שמור עדכון</button>
+            <button className="btn-main" style={S.btn} onClick={handleSave}>שמור עדכון</button>
           </div>
         )}
 
         {tab==="history" && (
-          <div style={S.card}>
+          <div className="tab-content km-card" style={S.card}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px"}}>
               <div style={{...S.sectionTitle,margin:0}}>היסטוריית נסיעות</div>
               <button style={S.btnGhost} onClick={exportCSV}>⬇ CSV</button>
@@ -481,7 +483,7 @@ export default function App() {
         </div>
       )}
 
-      {toast && <div style={{position:"fixed",bottom:20,left:"50%",transform:"translateX(-50%)",background:toast.color,color:"#fff",padding:"10px 20px",borderRadius:"20px",fontSize:"14px",fontWeight:700}}>{toast.msg}</div>}
+      {toast && <div className="toast-anim" style={{position:"fixed",bottom:20,left:"50%",transform:"translateX(-50%)",background:toast.color,color:"#fff",padding:"10px 22px",borderRadius:"24px",fontSize:"14px",fontWeight:700,boxShadow:"0 4px 16px rgba(0,0,0,0.18)"}}>{toast.msg}</div>}
     </div>
   );
 }

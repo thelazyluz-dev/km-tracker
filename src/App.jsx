@@ -280,6 +280,16 @@ export default function App() {
     showToast("נשמר ✓ — ראה סטטוס חי למטה",cl.green);
   }
 
+  function deleteDailyLog(date){
+    const mk=mKey(uf.year,uf.month);
+    const ex=migrateEntry(appData?.months?.[mk])||{dayOverrides:{}};
+    const newLogs={...(ex.dailyLogs||{})};
+    delete newLogs[date];
+    persist({...appData,months:{...(appData.months||{}),[mk]:{...ex,dailyLogs:newLogs}}});
+    setUf(prev=>{const l={...(prev.dailyLogs||{})};delete l[date];return {...prev,dailyLogs:l};});
+    showToast("נמחק",cl.red);
+  }
+
   function handleSetup(){
     if(!sf.startOdo||!sf.commute||!sf.yearStart) return;
     const d={setup:{yearStart:sf.yearStart,startOdometer:Number(sf.startOdo),commute:Number(sf.commute),yearlyBudget:Number(sf.yearlyBudget)||DEFAULT_BUDGET},months:{}};
@@ -669,29 +679,27 @@ export default function App() {
             <div style={{marginTop:"22px",paddingTop:"18px",borderTop:`1px solid ${cl.border}`}}>
               <div style={{...S.sectionTitle,marginBottom:"4px"}}>סטטוס חי — איפה אני עכשיו?</div>
               <div style={{fontSize:"12px",color:cl.muted,marginBottom:"12px",lineHeight:"1.5"}}>הזן קריאת מד של היום כדי לראות כמה ק״מ פרטי נסעת עד כה החודש</div>
-              <div style={{display:"flex",gap:"8px",alignItems:"flex-end"}}>
-                <div style={{flex:1}}>
-                  <label style={{...S.label,marginTop:0,color:cl.muted2,fontSize:"10px"}}>תאריך</label>
-                  <input style={{...S.input,padding:"11px 12px",fontSize:"14px"}} type="date"
-                    value={dailyLog.date}
-                    min={toISO(uf.year,uf.month,1)}
-                    max={toISO(uf.year,uf.month,daysInMonth(uf.year,uf.month))}
-                    onChange={e=>setDailyLog(l=>({...l,date:e.target.value}))}/>
-                </div>
-                <div style={{flex:1}}>
-                  <label style={{...S.label,marginTop:0,color:cl.muted2,fontSize:"10px"}}>קריאת מד</label>
-                  <input style={{...S.input,padding:"11px 12px",fontSize:"14px"}} type="number" placeholder="ק״מ"
-                    value={dailyLog.odo}
-                    onChange={e=>setDailyLog(l=>({...l,odo:e.target.value}))}/>
-                </div>
-                <button className="btn-main" style={{...S.btn,marginTop:0,width:"auto",padding:"12px 18px",flexShrink:0,fontSize:"13px",fontWeight:700}} onClick={saveDailyLog}>שמור</button>
-              </div>
+              <label style={{...S.label,marginTop:0,color:cl.muted2}}>תאריך</label>
+              <input style={S.input} type="date"
+                value={dailyLog.date}
+                min={toISO(uf.year,uf.month,1)}
+                max={toISO(uf.year,uf.month,daysInMonth(uf.year,uf.month))}
+                onChange={e=>setDailyLog(l=>({...l,date:e.target.value}))}/>
+              <label style={{...S.label,color:cl.muted2}}>קריאת מד (ק״מ)</label>
+              <input style={S.input} type="number" placeholder="למשל: 47500"
+                value={dailyLog.odo}
+                onChange={e=>setDailyLog(l=>({...l,odo:e.target.value}))}/>
+              <button className="btn-main" style={{...S.btn,marginTop:"12px"}} onClick={saveDailyLog}>שמור קריאה יומית ✓</button>
+
               {Object.keys(uf.dailyLogs||{}).length>0&&(
-                <div style={{marginTop:"10px",display:"flex",flexDirection:"column",gap:"4px"}}>
-                  {Object.entries(uf.dailyLogs||{}).sort().reverse().slice(0,3).map(([date,odo])=>(
-                    <div key={date} style={{display:"flex",justifyContent:"space-between",padding:"8px 12px",background:cl.surface2,borderRadius:"8px",fontSize:"12px"}}>
-                      <span style={{color:cl.muted2}}>{date}</span>
-                      <span style={{color:cl.text,fontWeight:600}}>{Number(odo).toLocaleString()} ק״מ</span>
+                <div style={{marginTop:"14px",display:"flex",flexDirection:"column",gap:"6px"}}>
+                  <div style={{fontSize:"10px",fontWeight:700,color:cl.muted,textTransform:"uppercase",letterSpacing:"1px",marginBottom:"2px"}}>הזנות שמורות</div>
+                  {Object.entries(uf.dailyLogs||{}).sort().reverse().map(([date,odo])=>(
+                    <div key={date} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"11px 14px",background:cl.surface2,borderRadius:"10px",border:`1px solid ${cl.border}`}}>
+                      <span style={{color:cl.muted2,fontSize:"13px"}}>{date}</span>
+                      <span style={{color:cl.text,fontWeight:700,fontSize:"14px"}}>{Number(odo).toLocaleString()} ק״מ</span>
+                      <button onClick={()=>deleteDailyLog(date)}
+                        style={{background:"none",border:"none",cursor:"pointer",color:cl.red,fontSize:"16px",padding:"0 2px",lineHeight:1}}>🗑</button>
                     </div>
                   ))}
                 </div>

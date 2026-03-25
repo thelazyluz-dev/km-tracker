@@ -63,26 +63,26 @@ function loadData() { try{return JSON.parse(localStorage.getItem(KEY));}catch{re
 function saveData(d) { try{localStorage.setItem(KEY,JSON.stringify(d));}catch{} }
 
 const cl = {
-  bg:           "#08080e",
-  surface:      "#0f0f18",
-  surface2:     "#161622",
-  border:       "rgba(255,255,255,0.06)",
-  borderStrong: "rgba(255,255,255,0.13)",
-  text:         "#f0eef8",
-  muted:        "rgba(240,238,248,0.35)",
-  muted2:       "rgba(240,238,248,0.62)",
+  bg:           "#0f0f1a",
+  surface:      "#181828",
+  surface2:     "#20202e",
+  border:       "rgba(255,255,255,0.1)",
+  borderStrong: "rgba(255,255,255,0.18)",
+  text:         "#f2f0fa",
+  muted:        "rgba(242,240,250,0.45)",
+  muted2:       "rgba(242,240,250,0.75)",
   accent:       "#a78bfa",
-  accentBg:     "rgba(167,139,250,0.1)",
+  accentBg:     "rgba(167,139,250,0.12)",
   green:        "#34d399",
-  greenBg:      "rgba(52,211,153,0.1)",
+  greenBg:      "rgba(52,211,153,0.12)",
   orange:       "#fb923c",
-  orangeBg:     "rgba(251,146,60,0.1)",
+  orangeBg:     "rgba(251,146,60,0.12)",
   red:          "#f87171",
-  redBg:        "rgba(248,113,113,0.1)",
+  redBg:        "rgba(248,113,113,0.12)",
   yellow:       "#fbbf24",
-  yellowBg:     "rgba(251,191,36,0.08)",
+  yellowBg:     "rgba(251,191,36,0.1)",
   blue:         "#818cf8",
-  blueBg:       "rgba(129,140,248,0.1)",
+  blueBg:       "rgba(129,140,248,0.12)",
 };
 
 const S = {
@@ -276,7 +276,8 @@ export default function App() {
     const updated={...ex,dailyLogs:{...(ex.dailyLogs||{}),[dailyLog.date]:Number(dailyLog.odo)}};
     persist({...appData,months:{...(appData.months||{}),[mk]:updated}});
     setUf(prev=>({...prev,dailyLogs:{...(prev.dailyLogs||{}),[dailyLog.date]:Number(dailyLog.odo)}}));
-    showToast("יומן נשמר ✓");
+    setDailyLog(l=>({...l,odo:""}));
+    showToast("נשמר ✓ — ראה סטטוס חי למטה",cl.green);
   }
 
   function handleSetup(){
@@ -666,7 +667,8 @@ export default function App() {
 
             {/* Daily log */}
             <div style={{marginTop:"22px",paddingTop:"18px",borderTop:`1px solid ${cl.border}`}}>
-              <div style={{...S.sectionTitle,marginBottom:"12px"}}>יומן יומי — Live Status</div>
+              <div style={{...S.sectionTitle,marginBottom:"4px"}}>סטטוס חי — איפה אני עכשיו?</div>
+              <div style={{fontSize:"12px",color:cl.muted,marginBottom:"12px",lineHeight:"1.5"}}>הזן קריאת מד של היום כדי לראות כמה ק״מ פרטי נסעת עד כה החודש</div>
               <div style={{display:"flex",gap:"8px",alignItems:"flex-end"}}>
                 <div style={{flex:1}}>
                   <label style={{...S.label,marginTop:0,color:cl.muted2,fontSize:"10px"}}>תאריך</label>
@@ -682,7 +684,7 @@ export default function App() {
                     value={dailyLog.odo}
                     onChange={e=>setDailyLog(l=>({...l,odo:e.target.value}))}/>
                 </div>
-                <button className="btn-main" style={{...S.btn,marginTop:0,width:"auto",padding:"12px 16px",flexShrink:0,fontSize:"18px"}} onClick={saveDailyLog}>+</button>
+                <button className="btn-main" style={{...S.btn,marginTop:0,width:"auto",padding:"12px 18px",flexShrink:0,fontSize:"13px",fontWeight:700}} onClick={saveDailyLog}>שמור</button>
               </div>
               {Object.keys(uf.dailyLogs||{}).length>0&&(
                 <div style={{marginTop:"10px",display:"flex",flexDirection:"column",gap:"4px"}}>

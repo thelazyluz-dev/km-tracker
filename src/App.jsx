@@ -74,6 +74,8 @@ const S = {
   badge:(c,bg)=>({display:"inline-flex",alignItems:"center",padding:"4px 10px",borderRadius:"20px",fontSize:"12px",fontWeight:700,color:c,background:bg}),
 };
 
+const REMINDER_KEY = "km_reminder_dismissed";
+
 export default function App() {
   const today    = new Date();
   const todayISO = toISO(today.getFullYear(),today.getMonth(),today.getDate());
@@ -83,6 +85,9 @@ export default function App() {
   const [screen,  setScreen]  = useState("loading");
   const [tab,     setTab]     = useState("dashboard");
   const [toast,   setToast]   = useState(null);
+  const [reminderDismissed, setReminderDismissed] = useState(()=>{
+    try{ return localStorage.getItem(REMINDER_KEY)||""; }catch{ return ""; }
+  });
   const [showSettings, setShowSettings] = useState(false);
   const [settingsForm, setSettingsForm] = useState({commute:"",yearlyBudget:""});
 
@@ -98,6 +103,11 @@ export default function App() {
   },[]);
 
   function persist(d){setAppData({...d});saveData({...d});}
+
+  function dismissReminder(){
+    try{ localStorage.setItem(REMINDER_KEY, todayKey); }catch{}
+    setReminderDismissed(todayKey);
+  }
 
   function showToast(msg,color=cl.green){
     setToast({msg,color});
@@ -377,6 +387,27 @@ export default function App() {
 
         {tab==="dashboard" && (
           <div className="tab-content">
+            {annual && !annual.byMonth[todayKey] && reminderDismissed!==todayKey && (
+              <div className="reminder-banner km-card" style={{...S.card,background:"#fef9c3",border:"1px solid #fde68a",display:"flex",alignItems:"flex-start",gap:"12px",marginBottom:"12px"}}>
+                <span style={{fontSize:"24px",lineHeight:1}}>🔔</span>
+                <div style={{flex:1}}>
+                  <div style={{fontWeight:700,fontSize:"14px",color:cl.yellow,marginBottom:"4px"}}>
+                    תזכורת חודשית
+                  </div>
+                  <div style={{fontSize:"13px",color:cl.yellow,lineHeight:"1.5"}}>
+                    עוד לא הזנת את מד הק"מ לחודש <strong>{MONTH_HE[today.getMonth()]}</strong>.
+                    עדכן כדי לשמור על מעקב מדויק.
+                  </div>
+                  <div style={{display:"flex",gap:"8px",marginTop:"10px"}}>
+                    <button className="btn-main" style={{...S.btn,marginTop:0,padding:"8px 16px",fontSize:"13px",width:"auto"}}
+                      onClick={()=>{ setTab("update"); setUf(f=>({...f,year:today.getFullYear(),month:today.getMonth()})); }}>
+                      עדכן עכשיו ←
+                    </button>
+                    <button style={S.btnGhost} onClick={dismissReminder}>אחר כך</button>
+                  </div>
+                </div>
+              </div>
+            )}
             <div className="km-card" style={S.card}>
               <div style={S.sectionTitle}>נותר לנסוע השנה</div>
               <div style={{fontSize:"54px",fontWeight:800,color:annual.remaining<1000?cl.red:cl.green}}>

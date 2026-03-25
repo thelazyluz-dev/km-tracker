@@ -102,11 +102,51 @@ export default function App() {
     setScreen(d?.setup?"main":"setup");
   },[]);
 
-  function persist(d){setAppData({...d});saveData({...d});}
+  // Register Service Worker
+  useEffect(()=>{
+    if(!("serviceWorker" in navigator)) return;
+    navigator.serviceWorker.register("/sw.js").then(reg=>{
+      // Listen for notification-click → open update tab
+      navigator.serviceWorker.addEventListener("message",(e)=>{
+        if(e.data?.type==="OPEN_UPDATE_TAB") setTab("update");
+      });
+      // Register Periodic Background Sync if supported (~Chrome Android)
+      if("periodicSync" in reg){
+        Notification.requestPermission().then(perm=>{
+          if(perm==="granted"){
+            reg.periodicSync.register("km-monthly-reminder",{minInterval: 24*60*60*1000})
+              .catch(()=>{});
+          }
+        });
+      }
+    }).catch(()=>{});
+  },[]);
+
+  function syncStateToSW(d, dismissed){
+    if(!("serviceWorker" in navigator)||!navigator.serviceWorker.controller) return;
+    const months=d?.setup?getYearMonths(d.setup.yearStart):[];
+    const lastEntered=months.slice().reverse().find(({key})=>d?.months?.[key]?.odometer)?.key||null;
+    navigator.serviceWorker.controller.postMessage({
+      type:"KM_STATE",
+      payload:{
+        lastEnteredMonth: lastEntered,
+        reminderDismissed: dismissed ?? localStorage.getItem(REMINDER_KEY) ?? "",
+        lastNotifiedMonth: null,
+      }
+    });
+  }
+
+  function persist(d){
+    setAppData({...d});
+    saveData({...d});
+    // Give SW time to activate on first load
+    setTimeout(()=>syncStateToSW(d, null), 500);
+  }
 
   function dismissReminder(){
     try{ localStorage.setItem(REMINDER_KEY, todayKey); }catch{}
     setReminderDismissed(todayKey);
+    syncStateToSW(appData, todayKey);
   }
 
   function showToast(msg,color=cl.green){
@@ -507,7 +547,19 @@ export default function App() {
             <label style={S.label}>תקציב שנתי (ק"מ)</label>
             <input style={S.input} type="number" value={settingsForm.yearlyBudget}
               onChange={e=>setSettingsForm({...settingsForm,yearlyBudget:e.target.value})}/>
-            <button style={S.btn} onClick={handleSaveSettings}>שמור</button>
+            <button className="btn-main" style={S.btn} onClick={handleSaveSettings}>שמור</button>
+            {"Notification" in window && Notification.permission!=="granted" && (
+              <button className="btn-main" style={{...S.btn,marginTop:"8px",backgroundImage:"linear-gradient(135deg,#92400e,#c2410c)"}}
+                onClick={()=>Notification.requestPermission().then(p=>{
+                  if(p==="granted"){showToast("התראות מופעלות ✓");syncStateToSW(appData,null);}
+                  else showToast("לא ניתנה הרשאה",cl.red);
+                })}>
+                🔔 הפעל התראות פוש
+              </button>
+            )}
+            {"Notification" in window && Notification.permission==="granted" && (
+              <div style={{marginTop:"10px",fontSize:"12px",color:cl.green,textAlign:"center",fontWeight:600}}>✓ התראות פוש מופעלות</div>
+            )}
             <button style={{...S.btn,marginTop:"8px",background:"transparent",color:cl.muted,border:`1px solid ${cl.border}`}}
               onClick={()=>setShowSettings(false)}>ביטול</button>
           </div>

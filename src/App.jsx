@@ -323,8 +323,8 @@ export default function App() {
           <input style={S.input} type="number" value={sf.yearlyBudget} onChange={e=>setSf({...sf,yearlyBudget:e.target.value})}/>
           <button className="btn-main" style={S.btn} onClick={handleSetup}>התחל מעקב ←</button>
         </div>
-        <div style={{textAlign:"center",fontSize:"11px",color:cl.muted,marginTop:"16px",paddingBottom:"8px"}}>made by illouzman</div>
       </div>
+      <div style={{position:"fixed",bottom:0,left:0,right:0,textAlign:"center",fontSize:"11px",color:cl.muted,padding:"6px 0 8px",background:cl.bg,borderTop:`1px solid ${cl.border}`}}>made by illouzman</div>
     </div>
   );
 
@@ -588,7 +588,7 @@ export default function App() {
       )}
 
       {toast && <div className="toast-anim" style={{position:"fixed",bottom:20,left:"50%",transform:"translateX(-50%)",background:toast.color,color:"#fff",padding:"10px 22px",borderRadius:"24px",fontSize:"14px",fontWeight:700,boxShadow:"0 4px 16px rgba(0,0,0,0.18)"}}>{toast.msg}</div>}
-      <div style={{textAlign:"center",fontSize:"11px",color:cl.muted,marginTop:"24px",paddingBottom:"8px"}}>made by illouzman</div>
+      <div style={{position:"fixed",bottom:0,left:0,right:0,textAlign:"center",fontSize:"11px",color:cl.muted,padding:"6px 0 8px",background:cl.bg,borderTop:`1px solid ${cl.border}`}}>made by illouzman</div>
     </div>
   );
 }

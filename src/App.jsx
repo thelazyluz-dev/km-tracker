@@ -62,7 +62,7 @@ function getYearMonths(yearStart) {
 function loadData() { try{return JSON.parse(localStorage.getItem(KEY));}catch{return null;} }
 function saveData(d) { try{localStorage.setItem(KEY,JSON.stringify(d));}catch{} }
 
-const cl = {
+const clDark = {
   bg:           "#1a1a2e",
   surface:      "#242438",
   surface2:     "#2e2e46",
@@ -72,42 +72,67 @@ const cl = {
   muted:        "rgba(242,240,250,0.55)",
   muted2:       "rgba(242,240,250,0.82)",
   accent:       "#a78bfa",
-  accentBg:     "rgba(167,139,250,0.12)",
+  accentBg:     "rgba(167,139,250,0.15)",
   green:        "#34d399",
-  greenBg:      "rgba(52,211,153,0.12)",
+  greenBg:      "rgba(52,211,153,0.14)",
   orange:       "#fb923c",
-  orangeBg:     "rgba(251,146,60,0.12)",
+  orangeBg:     "rgba(251,146,60,0.14)",
   red:          "#f87171",
-  redBg:        "rgba(248,113,113,0.12)",
+  redBg:        "rgba(248,113,113,0.14)",
   yellow:       "#fbbf24",
-  yellowBg:     "rgba(251,191,36,0.1)",
+  yellowBg:     "rgba(251,191,36,0.12)",
   blue:         "#818cf8",
-  blueBg:       "rgba(129,140,248,0.12)",
+  blueBg:       "rgba(129,140,248,0.14)",
 };
 
-const S = {
-  page:  {minHeight:"100vh",background:cl.bg,display:"flex",justifyContent:"center",padding:"24px 16px 80px",fontFamily:"-apple-system,BlinkMacSystemFont,'SF Pro Display',system-ui,sans-serif",direction:"rtl"},
-  wrap:  {width:"100%",maxWidth:"430px"},
-  card:  {background:cl.surface,borderRadius:"20px",padding:"22px 24px",marginBottom:"14px",border:`1px solid ${cl.border}`},
-  cardYellow: {background:"rgba(251,191,36,0.07)",borderRadius:"20px",padding:"18px 20px",marginBottom:"14px",border:"1px solid rgba(251,191,36,0.18)"},
-  sectionTitle: {fontSize:"10px",fontWeight:700,color:cl.muted,textTransform:"uppercase",letterSpacing:"1.5px",margin:"0 0 16px"},
-  h1:    {fontSize:"28px",fontWeight:800,color:cl.text,margin:0,letterSpacing:"-0.5px"},
-  label: {display:"block",fontSize:"11px",fontWeight:600,color:cl.muted,marginBottom:"8px",marginTop:"20px",textTransform:"uppercase",letterSpacing:"1px"},
-  hint:  {fontSize:"12px",color:cl.muted,marginTop:"5px",lineHeight:"1.6"},
-  input: {width:"100%",background:cl.surface2,border:`1px solid ${cl.border}`,borderRadius:"12px",color:cl.text,fontSize:"16px",padding:"14px 16px",boxSizing:"border-box",outline:"none",fontFamily:"inherit"},
-  btn:   {width:"100%",marginTop:"20px",padding:"16px",borderRadius:"14px",background:"linear-gradient(135deg,#7c3aed 0%,#a78bfa 100%)",color:"#fff",fontWeight:700,fontSize:"15px",border:"none",cursor:"pointer",fontFamily:"inherit",letterSpacing:"0.3px"},
-  btnGhost: {padding:"9px 16px",borderRadius:"10px",background:"transparent",border:`1px solid ${cl.border}`,color:cl.muted2,fontSize:"13px",cursor:"pointer",fontFamily:"inherit"},
-  tab:  (a)=>({flex:1,padding:"10px 4px",background:a?"rgba(167,139,250,0.12)":"transparent",color:a?cl.accent:cl.muted,border:"none",cursor:"pointer",fontWeight:a?700:400,fontSize:"13px",fontFamily:"inherit",borderRadius:"9px"}),
-  tabs: {display:"flex",background:cl.surface2,borderRadius:"14px",padding:"4px",marginBottom:"20px",border:`1px solid ${cl.border}`},
-  row:  {display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 0",borderBottom:`1px solid ${cl.border}`,fontSize:"14px"},
-  badge:(c,bg)=>({display:"inline-flex",alignItems:"center",padding:"4px 12px",borderRadius:"20px",fontSize:"12px",fontWeight:700,color:c,background:bg}),
+const clLight = {
+  bg:           "#f4f3ff",
+  surface:      "#ffffff",
+  surface2:     "#eeecfb",
+  border:       "rgba(0,0,0,0.09)",
+  borderStrong: "rgba(0,0,0,0.18)",
+  text:         "#1a1730",
+  muted:        "rgba(26,23,48,0.5)",
+  muted2:       "rgba(26,23,48,0.78)",
+  accent:       "#7c3aed",
+  accentBg:     "rgba(124,58,237,0.1)",
+  green:        "#059669",
+  greenBg:      "rgba(5,150,105,0.1)",
+  orange:       "#d97706",
+  orangeBg:     "rgba(217,119,6,0.1)",
+  red:          "#dc2626",
+  redBg:        "rgba(220,38,38,0.1)",
+  yellow:       "#b45309",
+  yellowBg:     "rgba(180,83,9,0.1)",
+  blue:         "#4f46e5",
+  blueBg:       "rgba(79,70,229,0.1)",
 };
 
-function RingProgress({pct,color}){
+function makeS(cl){
+  return {
+    page:  {minHeight:"100vh",background:cl.bg,display:"flex",justifyContent:"center",padding:"24px 16px 80px",fontFamily:"-apple-system,BlinkMacSystemFont,'SF Pro Display',system-ui,sans-serif",direction:"rtl"},
+    wrap:  {width:"100%",maxWidth:"430px"},
+    card:  {background:cl.surface,borderRadius:"20px",padding:"22px 24px",marginBottom:"14px",border:`1px solid ${cl.border}`},
+    cardYellow: {background:"rgba(251,191,36,0.07)",borderRadius:"20px",padding:"18px 20px",marginBottom:"14px",border:"1px solid rgba(251,191,36,0.18)"},
+    sectionTitle: {fontSize:"10px",fontWeight:700,color:cl.muted,textTransform:"uppercase",letterSpacing:"1.5px",margin:"0 0 16px"},
+    h1:    {fontSize:"28px",fontWeight:800,color:cl.text,margin:0,letterSpacing:"-0.5px"},
+    label: {display:"block",fontSize:"11px",fontWeight:600,color:cl.muted,marginBottom:"8px",marginTop:"20px",textTransform:"uppercase",letterSpacing:"1px"},
+    hint:  {fontSize:"12px",color:cl.muted,marginTop:"5px",lineHeight:"1.6"},
+    input: {width:"100%",background:cl.surface2,border:`1px solid ${cl.border}`,borderRadius:"12px",color:cl.text,fontSize:"16px",padding:"14px 16px",boxSizing:"border-box",outline:"none",fontFamily:"inherit"},
+    btn:   {width:"100%",marginTop:"20px",padding:"16px",borderRadius:"14px",background:"linear-gradient(135deg,#7c3aed 0%,#a78bfa 100%)",color:"#fff",fontWeight:700,fontSize:"15px",border:"none",cursor:"pointer",fontFamily:"inherit",letterSpacing:"0.3px"},
+    btnGhost: {padding:"9px 16px",borderRadius:"10px",background:"transparent",border:`1px solid ${cl.border}`,color:cl.muted2,fontSize:"13px",cursor:"pointer",fontFamily:"inherit"},
+    tab:  (a)=>({flex:1,padding:"10px 4px",background:a?"rgba(167,139,250,0.12)":"transparent",color:a?cl.accent:cl.muted,border:"none",cursor:"pointer",fontWeight:a?700:400,fontSize:"13px",fontFamily:"inherit",borderRadius:"9px"}),
+    tabs: {display:"flex",background:cl.surface2,borderRadius:"14px",padding:"4px",marginBottom:"20px",border:`1px solid ${cl.border}`},
+    row:  {display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 0",borderBottom:`1px solid ${cl.border}`,fontSize:"14px"},
+    badge:(c,bg)=>({display:"inline-flex",alignItems:"center",padding:"4px 12px",borderRadius:"20px",fontSize:"12px",fontWeight:700,color:c,background:bg}),
+  };
+}
+
+function RingProgress({pct,color,trackColor}){
   const r=46, circ=2*Math.PI*r, offset=circ-(Math.min(pct,100)/100)*circ;
   return(
     <svg width="120" height="120" style={{transform:"rotate(-90deg)",flexShrink:0}}>
-      <circle cx="60" cy="60" r={r} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="9"/>
+      <circle cx="60" cy="60" r={r} fill="none" stroke={trackColor||"rgba(255,255,255,0.07)"} strokeWidth="9"/>
       <circle cx="60" cy="60" r={r} fill="none" stroke={color} strokeWidth="9" strokeLinecap="round"
         strokeDasharray={circ} strokeDashoffset={offset}
         style={{transition:"stroke-dashoffset 1.1s cubic-bezier(0.4,0,0.2,1)",filter:`drop-shadow(0 0 6px ${color}88)`}}/>
@@ -121,6 +146,16 @@ export default function App() {
   const today    = new Date();
   const todayISO = toISO(today.getFullYear(),today.getMonth(),today.getDate());
   const todayKey = mKey(today.getFullYear(),today.getMonth());
+
+  const [isDark, setIsDark] = useState(()=>window.matchMedia("(prefers-color-scheme: dark)").matches);
+  useEffect(()=>{
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const handler = e => setIsDark(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  },[]);
+  const cl = isDark ? clDark : clLight;
+  const S  = makeS(cl);
 
   const [appData, setAppData] = useState(null);
   const [screen,  setScreen]  = useState("loading");
@@ -620,7 +655,7 @@ export default function App() {
               <div style={S.sectionTitle}>נותר לנסוע השנה</div>
               <div style={{display:"flex",alignItems:"center",gap:"20px"}}>
                 <div style={{position:"relative",flexShrink:0}}>
-                  <RingProgress pct={annual.pct} color={annual.pct>90?cl.red:annual.pct>70?cl.orange:cl.accent}/>
+                  <RingProgress pct={annual.pct} color={annual.pct>90?cl.red:annual.pct>70?cl.orange:cl.accent} trackColor={isDark?"rgba(255,255,255,0.07)":"rgba(0,0,0,0.07)"}/>
                   <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
                     <div style={{fontSize:"15px",fontWeight:800,color:annual.pct>90?cl.red:cl.muted2}}>{annual.pct}%</div>
                     <div style={{fontSize:"9px",color:cl.muted,letterSpacing:"0.5px"}}>נוצל</div>

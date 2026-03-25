@@ -26,7 +26,11 @@ function isWorkday(y,m,d)  { const w=dowOf(y,m,d); return w>=0&&w<=4; }
 function toISO(y,m,d)      { return `${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`; }
 function mKey(y,m)         { return `${y}-${String(m+1).padStart(2,"0")}`; }
 
-function getDefaultState(iso,y,m,d){ return (isWorkday(y,m,d)&&!HOLIDAYS[iso])?"work":"holiday"; }
+function getDefaultState(iso,y,m,d){
+  if(HOLIDAYS[iso]) return "holiday";
+  const w=dowOf(y,m,d);
+  return (w===5||w===6)?"off":"work";
+}
 function getEffectiveState(iso,y,m,d,ov){ return ov?.[iso]??getDefaultState(iso,y,m,d); }
 
 function countWorkdays(y,m,ov={}){
@@ -131,7 +135,8 @@ export default function App() {
   const [sf, setSf] = useState({yearStart:`${today.getFullYear()}-01-01`,startOdo:"",commute:"62",yearlyBudget:String(DEFAULT_BUDGET)});
 
   const lastM = new Date(today.getFullYear(),today.getMonth()-1,1);
-  const [uf, setUf] = useState({year:lastM.getFullYear(),month:lastM.getMonth(),odometer:"",dayOverrides:{}});
+  const [uf, setUf] = useState({year:lastM.getFullYear(),month:lastM.getMonth(),odometer:"",dayOverrides:{},dailyLogs:{}});
+  const [dailyLog, setDailyLog] = useState({date:todayISO,odo:""});
 
   useEffect(()=>{
     const d=loadData();
@@ -244,6 +249,35 @@ export default function App() {
     return {totalKm,workDays,workKm,personal,prevOdo};
   },[uf.odometer,uf.dayOverrides,uf.year,uf.month,appData,getPrevOdo]);
 
+  const liveFromLogs=useMemo(()=>{
+    const logs=uf.dailyLogs||{};
+    const dates=Object.keys(logs).sort();
+    if(!dates.length||!appData?.setup) return null;
+    const latestDate=dates[dates.length-1];
+    const latestOdo=logs[latestDate];
+    const prevOdo=getPrevOdo(uf.year,uf.month);
+    const totalKm=latestOdo-prevOdo;
+    if(totalKm<0||isNaN(totalKm)) return null;
+    const dd=Number(latestDate.split("-")[2]);
+    let workKm=0;
+    for(let d=1;d<=dd;d++){
+      const iso=toISO(uf.year,uf.month,d);
+      if(getEffectiveState(iso,uf.year,uf.month,d,uf.dayOverrides)==="work") workKm+=(appData.setup.commute||62);
+    }
+    const personal=Math.max(0,totalKm-workKm);
+    return {totalKm,workKm,personal,latestDate};
+  },[uf.dailyLogs,uf.year,uf.month,uf.dayOverrides,appData,getPrevOdo]);
+
+  function saveDailyLog(){
+    if(!dailyLog.odo) return;
+    const mk=mKey(uf.year,uf.month);
+    const ex=migrateEntry(appData?.months?.[mk])||{dayOverrides:{}};
+    const updated={...ex,dailyLogs:{...(ex.dailyLogs||{}),[dailyLog.date]:Number(dailyLog.odo)}};
+    persist({...appData,months:{...(appData.months||{}),[mk]:updated}});
+    setUf(prev=>({...prev,dailyLogs:{...(prev.dailyLogs||{}),[dailyLog.date]:Number(dailyLog.odo)}}));
+    showToast("יומן נשמר ✓");
+  }
+
   function handleSetup(){
     if(!sf.startOdo||!sf.commute||!sf.yearStart) return;
     const d={setup:{yearStart:sf.yearStart,startOdometer:Number(sf.startOdo),commute:Number(sf.commute),yearlyBudget:Number(sf.yearlyBudget)||DEFAULT_BUDGET},months:{}};
@@ -277,7 +311,7 @@ export default function App() {
     const mk=mKey(uf.year,uf.month);
     const newData={
       ...appData,
-      months:{...(appData.months||{}),[mk]:{odometer:Number(uf.odometer),dayOverrides:uf.dayOverrides,savedAt:new Date().toISOString()}}
+      months:{...(appData.months||{}),[mk]:{odometer:Number(uf.odometer),dayOverrides:uf.dayOverrides,dailyLogs:uf.dailyLogs||{},savedAt:new Date().toISOString()}}
     };
     persist(newData);
     showToast(`${MONTH_HE[uf.month]} נשמר ✓`);
@@ -287,7 +321,7 @@ export default function App() {
   function openUpdate(year,month){
     const mk=mKey(year,month);
     const ex=migrateEntry(appData?.months?.[mk]);
-    setUf({year,month,odometer:ex?.odometer?.toString()||"",dayOverrides:ex?.dayOverrides||{}});
+    setUf({year,month,odometer:ex?.odometer?.toString()||"",dayOverrides:ex?.dayOverrides||{},dailyLogs:ex?.dailyLogs||{}});
     setTab("update");
   }
 
@@ -297,16 +331,17 @@ export default function App() {
       const y=d.getFullYear(),m=d.getMonth();
       const mk=mKey(y,m);
       const ex=migrateEntry(appData?.months?.[mk]);
-      return {year:y,month:m,odometer:ex?.odometer?.toString()||"",dayOverrides:ex?.dayOverrides||{}};
+      return {year:y,month:m,odometer:ex?.odometer?.toString()||"",dayOverrides:ex?.dayOverrides||{},dailyLogs:ex?.dailyLogs||{}};
     });
   }
 
   function cycleDay(iso,y,m,d){
-    const cycle={"work":"off","off":"holiday","holiday":"work"};
     setUf(prev=>{
-      const cur=getEffectiveState(iso,y,m,d,prev.dayOverrides);
-      const next=cycle[cur];
       const def=getDefaultState(iso,y,m,d);
+      const cur=getEffectiveState(iso,y,m,d,prev.dayOverrides);
+      const next=def==="holiday"
+        ?({holiday:"work",work:"off",off:"holiday"})[cur]
+        :(cur==="work"?"off":"work");
       const newOv={...prev.dayOverrides};
       if(next===def) delete newOv[iso]; else newOv[iso]=next;
       return {...prev,dayOverrides:newOv};
@@ -347,7 +382,7 @@ export default function App() {
         <div style={{paddingBottom:"28px",marginBottom:"28px"}}>
           <div style={{fontSize:"13px",fontWeight:600,color:cl.accent,letterSpacing:"2px",textTransform:"uppercase",marginBottom:"10px"}}>ברוך הבא</div>
           <div style={{...S.h1,fontSize:"32px"}}>🚗 8.4k</div>
-          <div style={{fontSize:"14px",color:cl.muted,marginTop:"8px",lineHeight:"1.6"}}>מעקב ק"מ פרטי חכם לצרכי מס</div>
+          <div style={{fontSize:"14px",color:cl.muted2,marginTop:"8px",lineHeight:"1.6"}}>Smart Annual Mileage Management</div>
         </div>
         <div style={{...S.cardYellow,display:"flex",gap:"14px",alignItems:"flex-start"}}>
           <span style={{fontSize:"22px",lineHeight:1,marginTop:"2px"}}>💡</span>
@@ -357,18 +392,18 @@ export default function App() {
         </div>
         <div style={S.card}>
           <div style={S.sectionTitle}>הגדרות ראשוניות</div>
-          <label style={{...S.label,marginTop:0}}>תחילת שנת מדידה</label>
+          <label style={{...S.label,marginTop:0,color:cl.muted2}}>תחילת שנת מדידה</label>
           <input style={S.input} type="date" value={sf.yearStart} onChange={e=>setSf({...sf,yearStart:e.target.value})}/>
-          <label style={S.label}>קריאת מד ביום זה (ק"מ)</label>
+          <label style={{...S.label,color:cl.muted2}}>קריאת מד ביום זה (ק"מ)</label>
           <input style={S.input} type="number" placeholder="למשל: 45000" value={sf.startOdo} onChange={e=>setSf({...sf,startOdo:e.target.value})}/>
-          <label style={S.label}>הלוך-חזור לעבודה (ק"מ/יום)</label>
+          <label style={{...S.label,color:cl.muted2}}>הלוך-חזור לעבודה (ק"מ/יום)</label>
           <input style={S.input} type="number" placeholder="למשל: 62" value={sf.commute} onChange={e=>setSf({...sf,commute:e.target.value})}/>
-          <label style={S.label}>תקציב ק"מ פרטי שנתי</label>
+          <label style={{...S.label,color:cl.muted2}}>תקציב ק"מ פרטי שנתי</label>
           <input style={S.input} type="number" placeholder="למשל: 8400" value={sf.yearlyBudget} onChange={e=>setSf({...sf,yearlyBudget:e.target.value})}/>
           <button className="btn-main" style={S.btn} onClick={handleSetup}>התחל מעקב ←</button>
         </div>
       </div>
-      <div style={{position:"fixed",bottom:0,left:0,right:0,textAlign:"center",fontSize:"11px",color:cl.muted,padding:"6px 0 8px",background:cl.bg,borderTop:`1px solid ${cl.border}`}}>made by illouzman</div>
+      <div style={{position:"fixed",bottom:0,left:0,right:0,textAlign:"center",fontSize:"9px",color:"rgba(240,238,248,0.2)",padding:"5px 0 7px",background:cl.bg,borderTop:`1px solid ${cl.border}`}}>made by illouzman</div>
     </div>
   );
 
@@ -381,9 +416,9 @@ export default function App() {
     while(cells.length%7!==0) cells.push(null);
 
     const STATE_CFG={
-      work:    {label:"עבדתי",    icon:"✓", bg:"rgba(52,211,153,0.13)",  color:cl.green,  border:"rgba(52,211,153,0.4)"},
-      off:     {label:"לא עבדתי", icon:"✕", bg:"rgba(248,113,113,0.13)", color:cl.red,    border:"rgba(248,113,113,0.4)"},
-      holiday: {label:"חופש/חג",  icon:"—", bg:"rgba(251,191,36,0.1)",   color:cl.yellow, border:"rgba(251,191,36,0.3)"},
+      work:    {label:"עבדתי",    icon:"🚗", bg:"rgba(52,211,153,0.13)",  color:cl.green,  border:"rgba(52,211,153,0.4)"},
+      off:     {label:"לא עבדתי", icon:"🏠", bg:"rgba(248,113,113,0.13)", color:cl.red,    border:"rgba(248,113,113,0.4)"},
+      holiday: {label:"חג / חופש",icon:"🟡", bg:"rgba(251,191,36,0.1)",   color:cl.yellow, border:"rgba(251,191,36,0.3)"},
     };
 
     return(
@@ -426,7 +461,7 @@ export default function App() {
             );
           })}
         </div>
-        <p style={{fontSize:"11px",color:cl.muted,margin:"10px 0 0",textAlign:"center"}}>לחץ לסבב בין: עבדתי ← לא עבדתי ← חופש/חג</p>
+        <p style={{fontSize:"11px",color:cl.muted,margin:"10px 0 0",textAlign:"center"}}>א׳–ה׳: לחץ לסבב 🚗↔🏠 | חג: 🟡→🚗→🏠</p>
       </div>
     );
   }
@@ -456,23 +491,47 @@ export default function App() {
 
   function renderBarChart(){
     if(!annual) return null;
+    const chartH=90;
+    const yMax=Math.ceil((annual.maxPersonal||annual.allowance||100)/100)*100;
+    const ticks=[0,Math.round(yMax/2),yMax];
     const barGrad=(p)=>p>annual.allowance*1.2?"linear-gradient(180deg,#f87171,#fca5a5)":p>annual.allowance?"linear-gradient(180deg,#fb923c,#fcd34d)":"linear-gradient(180deg,#a78bfa,#34d399)";
+    const allowanceLineY=annual.allowance>0?Math.round((annual.allowance/yMax)*chartH):null;
     return(
-      <div style={{display:"flex",alignItems:"flex-end",gap:"4px",height:"90px",paddingTop:"10px"}}>
-        {annual.months.map(({year,month,key},i)=>{
-          const s=annual.byMonth[key];
-          const isCurr=key===todayKey;
-          const barH=s?Math.max(4,Math.round((s.personal/annual.maxPersonal)*70)):0;
-          return(
-            <div key={key} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:"2px"}}>
-              <div className={s?"bar-seg":undefined}
-                style={{width:"100%",height:`${barH}px`,background:s?barGrad(s.personal):"rgba(255,255,255,0.05)",borderRadius:"4px 4px 0 0",outline:isCurr?`2px solid ${cl.accent}`:"none",animationDelay:`${i*0.04}s`}}/>
-              <div style={{fontSize:"9px",color:isCurr?cl.accent:cl.muted,fontWeight:isCurr?700:"normal"}}>
-                {MONTH_HE[month].slice(0,3)}
-              </div>
-            </div>
-          );
-        })}
+      <div style={{display:"flex",gap:"4px",paddingTop:"6px"}}>
+        {/* Y axis */}
+        <div style={{display:"flex",flexDirection:"column",justifyContent:"space-between",height:`${chartH+14}px`,paddingBottom:"14px",flexShrink:0,width:"28px"}}>
+          {ticks.slice().reverse().map(t=>(
+            <div key={t} style={{fontSize:"8px",color:cl.muted,lineHeight:1,textAlign:"left"}}>{t>=1000?`${(t/1000).toFixed(1)}k`:t}</div>
+          ))}
+        </div>
+        {/* bars + allowance line */}
+        <div style={{flex:1,position:"relative"}}>
+          {allowanceLineY!=null&&(
+            <div style={{position:"absolute",left:0,right:0,bottom:`${14+allowanceLineY}px`,borderTop:"1px dashed rgba(167,139,250,0.45)",zIndex:1,pointerEvents:"none"}}/>
+          )}
+          <div style={{display:"flex",alignItems:"flex-end",gap:"3px",height:`${chartH+14}px`,paddingBottom:"14px"}}>
+            {annual.months.map(({year,month,key},i)=>{
+              const s=annual.byMonth[key];
+              const isFuture=key>todayKey;
+              const isCurr=key===todayKey;
+              const barH=s?Math.max(3,Math.round((s.personal/yMax)*chartH)):0;
+              return(
+                <div key={key} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:"2px"}}>
+                  <div className={s&&!isFuture?"bar-seg":undefined}
+                    style={{width:"100%",height:`${barH||2}px`,
+                      background:isFuture?"rgba(255,255,255,0.04)":s?barGrad(s.personal):"rgba(255,255,255,0.06)",
+                      borderRadius:"3px 3px 0 0",
+                      outline:isCurr?`2px solid ${cl.accent}`:"none",
+                      opacity:isFuture?0.35:1,
+                      animationDelay:`${i*0.04}s`}}/>
+                  <div style={{fontSize:"8px",color:isCurr?cl.accent:cl.muted,fontWeight:isCurr?700:"normal"}}>
+                    {MONTH_HE[month].slice(0,3)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       </div>
     );
   }
@@ -482,7 +541,7 @@ export default function App() {
       <div style={S.wrap}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",paddingBottom:"20px",marginBottom:"20px",borderBottom:`1px solid ${cl.border}`}}>
           <div>
-            <div style={{fontSize:"10px",fontWeight:700,color:cl.accent,letterSpacing:"2px",textTransform:"uppercase",marginBottom:"4px"}}>מעקב ק"מ</div>
+            <div style={{fontSize:"10px",fontWeight:700,color:cl.accent,letterSpacing:"2px",textTransform:"uppercase",marginBottom:"4px"}}>Smart Annual Mileage Management</div>
             <div style={{...S.h1,fontSize:"26px"}}>🚗 8.4k</div>
           </div>
           <div style={{display:"flex",gap:"8px"}}>
@@ -601,6 +660,48 @@ export default function App() {
               </div>
             )}
 
+            {/* Daily log */}
+            <div style={{marginTop:"22px",paddingTop:"18px",borderTop:`1px solid ${cl.border}`}}>
+              <div style={{...S.sectionTitle,marginBottom:"12px"}}>יומן יומי — Live Status</div>
+              <div style={{display:"flex",gap:"8px",alignItems:"flex-end"}}>
+                <div style={{flex:1}}>
+                  <label style={{...S.label,marginTop:0,color:cl.muted2,fontSize:"10px"}}>תאריך</label>
+                  <input style={{...S.input,padding:"11px 12px",fontSize:"14px"}} type="date"
+                    value={dailyLog.date}
+                    min={toISO(uf.year,uf.month,1)}
+                    max={toISO(uf.year,uf.month,daysInMonth(uf.year,uf.month))}
+                    onChange={e=>setDailyLog(l=>({...l,date:e.target.value}))}/>
+                </div>
+                <div style={{flex:1}}>
+                  <label style={{...S.label,marginTop:0,color:cl.muted2,fontSize:"10px"}}>קריאת מד</label>
+                  <input style={{...S.input,padding:"11px 12px",fontSize:"14px"}} type="number" placeholder="ק״מ"
+                    value={dailyLog.odo}
+                    onChange={e=>setDailyLog(l=>({...l,odo:e.target.value}))}/>
+                </div>
+                <button className="btn-main" style={{...S.btn,marginTop:0,width:"auto",padding:"12px 16px",flexShrink:0,fontSize:"18px"}} onClick={saveDailyLog}>+</button>
+              </div>
+              {Object.keys(uf.dailyLogs||{}).length>0&&(
+                <div style={{marginTop:"10px",display:"flex",flexDirection:"column",gap:"4px"}}>
+                  {Object.entries(uf.dailyLogs||{}).sort().reverse().slice(0,3).map(([date,odo])=>(
+                    <div key={date} style={{display:"flex",justifyContent:"space-between",padding:"8px 12px",background:cl.surface2,borderRadius:"8px",fontSize:"12px"}}>
+                      <span style={{color:cl.muted2}}>{date}</span>
+                      <span style={{color:cl.text,fontWeight:600}}>{Number(odo).toLocaleString()} ק״מ</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {liveFromLogs&&(
+                <div style={{marginTop:"12px",padding:"14px",background:"rgba(52,211,153,0.07)",borderRadius:"12px",border:"1px solid rgba(52,211,153,0.2)"}}>
+                  <div style={{fontSize:"10px",color:cl.green,textTransform:"uppercase",letterSpacing:"1px",marginBottom:"8px",fontWeight:700}}>סטטוס חי · {liveFromLogs.latestDate}</div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"8px",textAlign:"center"}}>
+                    <div><div style={{fontSize:"18px",fontWeight:800,color:cl.text}}>{liveFromLogs.totalKm}</div><div style={{fontSize:"10px",color:cl.muted}}>סה״כ</div></div>
+                    <div><div style={{fontSize:"18px",fontWeight:800,color:cl.blue}}>{liveFromLogs.workKm}</div><div style={{fontSize:"10px",color:cl.muted}}>עבודה</div></div>
+                    <div><div style={{fontSize:"18px",fontWeight:800,color:liveFromLogs.personal>annual?.allowance?cl.orange:cl.green}}>{liveFromLogs.personal}</div><div style={{fontSize:"10px",color:cl.muted}}>פרטי</div></div>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <button className="btn-main" style={S.btn} onClick={handleSave}>שמור עדכון ✓</button>
           </div>
         )}
@@ -672,7 +773,7 @@ export default function App() {
       )}
 
       {toast && <div className="toast-anim" style={{position:"fixed",bottom:28,left:"50%",transform:"translateX(-50%)",background:toast.color,color:"#fff",padding:"11px 24px",borderRadius:"28px",fontSize:"14px",fontWeight:700,boxShadow:`0 8px 32px ${toast.color}66`,whiteSpace:"nowrap"}}>{toast.msg}</div>}
-      <div style={{position:"fixed",bottom:0,left:0,right:0,textAlign:"center",fontSize:"11px",color:cl.muted,padding:"6px 0 8px",background:cl.bg,borderTop:`1px solid ${cl.border}`}}>made by illouzman</div>
+      <div style={{position:"fixed",bottom:0,left:0,right:0,textAlign:"center",fontSize:"9px",color:"rgba(240,238,248,0.2)",padding:"5px 0 7px",background:cl.bg,borderTop:`1px solid ${cl.border}`}}>made by illouzman</div>
     </div>
   );
 }

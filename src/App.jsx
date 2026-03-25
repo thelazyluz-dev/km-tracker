@@ -332,6 +332,21 @@ export default function App() {
 
     return(
       <div>
+        {/* מקרא */}
+        <div style={{display:"flex",gap:"12px",marginBottom:"10px",fontSize:"11px",color:cl.muted}}>
+          <span style={{display:"flex",alignItems:"center",gap:"5px"}}>
+            <span style={{width:11,height:11,borderRadius:3,background:cl.redBg,border:`1.5px solid ${cl.red}`,display:"inline-block",flexShrink:0}}/>
+            לא נסעתי
+          </span>
+          <span style={{display:"flex",alignItems:"center",gap:"5px"}}>
+            <span style={{width:11,height:11,borderRadius:3,background:cl.yellowBg,border:`1.5px solid #fde68a`,display:"inline-block",flexShrink:0}}/>
+            שישי / שבת / חג
+          </span>
+          <span style={{display:"flex",alignItems:"center",gap:"5px"}}>
+            <span style={{width:11,height:11,borderRadius:3,background:"transparent",border:`1.5px solid ${cl.border}`,display:"inline-block",flexShrink:0}}/>
+            יום עבודה
+          </span>
+        </div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:"2px",marginBottom:"4px"}}>
           {DAY_HE.map(h=><div key={h} style={{textAlign:"center",fontSize:"11px",color:cl.muted,padding:"3px 0"}}>{h}</div>)}
         </div>
@@ -343,19 +358,22 @@ export default function App() {
             const holiday=HOLIDAYS[iso];
             const isOff=uf.offDays.includes(iso);
             const canClick=isWD&&!holiday;
+            const isAutoOff=!isWD||!!holiday;
 
-            let bg="transparent",color=isWD?cl.text:"#ccc",fw="normal";
-            if(holiday){bg=cl.yellowBg;color=cl.yellow;}
+            let bg="transparent",color=cl.text,fw="normal";
+            if(isAutoOff){bg=cl.yellowBg;color=cl.yellow;}
             if(isOff){bg=cl.redBg;color=cl.red;fw="700";}
 
             return(
               <div key={i} onClick={()=>canClick&&toggleOffDay(iso)}
-                style={{textAlign:"center",padding:"7px 2px",borderRadius:"6px",background:bg,color,fontWeight:fw,cursor:canClick?"pointer":"default",fontSize:"13px"}}>
-                {d}
+                style={{textAlign:"center",padding:"5px 2px 4px",borderRadius:"6px",background:bg,color,fontWeight:fw,cursor:canClick?"pointer":"default",lineHeight:"1.2",minHeight:"36px",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
+                <span style={{fontSize:"13px"}}>{d}</span>
+                {holiday && <span style={{fontSize:"8px",fontWeight:600,marginTop:"1px",lineHeight:"1.1",wordBreak:"break-all",textAlign:"center",maxWidth:"100%"}}>{holiday}</span>}
               </div>
             );
           })}
         </div>
+        <p style={{fontSize:"11px",color:cl.muted,margin:"8px 0 0",textAlign:"center"}}>לחץ על יום עבודה לסימון כ״לא נסעתי״</p>
       </div>
     );
   }
@@ -484,6 +502,7 @@ export default function App() {
             <input style={S.input} type="number" value={uf.odometer} onChange={e=>setUf({...uf,odometer:e.target.value})}/>
 
             <label style={S.label}>ימים שלא נסעת לעבודה</label>
+            <p style={{...S.hint,marginTop:"-8px",marginBottom:"4px"}}>סמן ימים שנסעת לעבודה פחות מהרגיל — שישי/שבת/חגים לא נספרים ממילא</p>
             {renderCalendar()}
 
             <label style={{...S.label,marginTop:"14px"}}>הערה (אופציונלי)</label>

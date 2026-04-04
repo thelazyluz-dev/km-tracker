@@ -22,7 +22,7 @@ const HOLIDAYS = {
 
 function daysInMonth(y,m)  { return new Date(y,m+1,0).getDate(); }
 function dowOf(y,m,d)      { return new Date(y,m,d).getDay(); }
-function isWorkday(y,m,d)  { const w=dowOf(y,m,d); return w>=0&&w<=4; }
+
 function toISO(y,m,d)      { return `${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`; }
 function mKey(y,m)         { return `${y}-${String(m+1).padStart(2,"0")}`; }
 
@@ -170,10 +170,10 @@ export default function App() {
 
   const [sf, setSf] = useState({yearStart:`${today.getFullYear()}-01-01`,startOdo:"",commute:"62",yearlyBudget:String(DEFAULT_BUDGET)});
 
-  const lastM = new Date(today.getFullYear(),today.getMonth()-1,1);
-  const [uf, setUf] = useState({year:lastM.getFullYear(),month:lastM.getMonth(),odometer:"",dayOverrides:{},dailyLogs:{}});
+  const [uf, setUf] = useState({year:today.getFullYear(),month:today.getMonth(),odometer:"",dayOverrides:{},dailyLogs:{}});
   const [dayModal, setDayModal] = useState(null); // {iso, year, month, d}
   const [modalOdo, setModalOdo] = useState("");
+  const [modalState, setModalState] = useState(null);
 
   useEffect(()=>{
     const d=loadData();
@@ -280,11 +280,18 @@ export default function App() {
     const prevOdo=getPrevOdo(uf.year,uf.month);
     const totalKm=Number(uf.odometer)-prevOdo;
     if(totalKm<0||isNaN(totalKm)) return null;
-    const workDays=countWorkdays(uf.year,uf.month,uf.dayOverrides);
+    // Past month → count all days. Current month → count up to today. Future → 0.
+    const mk=mKey(uf.year,uf.month);
+    const upToDay=mk<todayKey?daysInMonth(uf.year,uf.month):mk===todayKey?today.getDate():0;
+    let workDays=0;
+    for(let d=1;d<=upToDay;d++){
+      const iso=toISO(uf.year,uf.month,d);
+      if(getEffectiveState(iso,uf.year,uf.month,d,uf.dayOverrides)==="work") workDays++;
+    }
     const workKm=workDays*(appData.setup.commute||62);
     const personal=Math.max(0,totalKm-workKm);
     return {totalKm,workDays,workKm,personal,prevOdo};
-  },[uf.odometer,uf.dayOverrides,uf.year,uf.month,appData,getPrevOdo]);
+  },[uf.odometer,uf.dayOverrides,uf.year,uf.month,appData,getPrevOdo,todayKey,today]);
 
   const liveFromLogs=useMemo(()=>{
     const logs=uf.dailyLogs||{};
@@ -308,6 +315,7 @@ export default function App() {
   function openDayModal(iso, year, month, d){
     const existing = (uf.dailyLogs||{})[iso];
     setModalOdo(existing ? String(existing) : "");
+    setModalState(getEffectiveState(iso, year, month, d, uf.dayOverrides));
     setDayModal({iso, year, month, d});
   }
 
@@ -330,19 +338,6 @@ export default function App() {
     setUf(prev => ({...prev, dayOverrides: newOv, dailyLogs: newLogs}));
     setDayModal(null);
     showToast("נשמר ✓", cl.green);
-  }
-
-  function deleteDayOdo(){
-    if(!dayModal) return;
-    const {iso, year, month} = dayModal;
-    const mk = mKey(year, month);
-    const newLogs = {...(uf.dailyLogs||{})};
-    delete newLogs[iso];
-    const ex = migrateEntry(appData?.months?.[mk]) || {dayOverrides:{}};
-    persist({...appData, months:{...(appData.months||{}), [mk]: {...ex, dailyLogs: newLogs}}});
-    setUf(prev => ({...prev, dailyLogs: newLogs}));
-    setModalOdo("");
-    showToast("נמחק", cl.red);
   }
 
   function handleSetup(){
@@ -399,19 +394,6 @@ export default function App() {
       const mk=mKey(y,m);
       const ex=migrateEntry(appData?.months?.[mk]);
       return {year:y,month:m,odometer:ex?.odometer?.toString()||"",dayOverrides:ex?.dayOverrides||{},dailyLogs:ex?.dailyLogs||{}};
-    });
-  }
-
-  function cycleDay(iso,y,m,d){
-    setUf(prev=>{
-      const def=getDefaultState(iso,y,m,d);
-      const cur=getEffectiveState(iso,y,m,d,prev.dayOverrides);
-      const next=def==="holiday"
-        ?({holiday:"work",work:"off",off:"holiday"})[cur]
-        :(cur==="work"?"off":"work");
-      const newOv={...prev.dayOverrides};
-      if(next===def) delete newOv[iso]; else newOv[iso]=next;
-      return {...prev,dayOverrides:newOv};
     });
   }
 
@@ -543,7 +525,7 @@ export default function App() {
         {annual.months.map(({year,month,key})=>{
           const s=annual.byMonth[key];
           const isCurr=key===todayKey;
-          let bg="rgba(255,255,255,0.04)", textC=cl.muted, borderC="transparent";
+          let bg=isDark?"rgba(255,255,255,0.05)":"rgba(0,0,0,0.05)", textC=cl.muted, borderC="transparent";
           if(s){ bg=s.personal>annual.allowance*1.2?cl.redBg:cl.greenBg; textC=s.personal>annual.allowance*1.2?cl.red:cl.green; }
           else if(isCurr){ bg=cl.accentBg; textC=cl.accent; }
           if(isCurr) borderC=cl.accent;
@@ -589,7 +571,7 @@ export default function App() {
                 <div key={key} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:"2px"}}>
                   <div className={s&&!isFuture?"bar-seg":undefined}
                     style={{width:"100%",height:`${barH||2}px`,
-                      background:isFuture?"rgba(255,255,255,0.04)":s?barGrad(s.personal):"rgba(255,255,255,0.06)",
+                      background:isFuture?(isDark?"rgba(255,255,255,0.04)":"rgba(0,0,0,0.06)"):s?barGrad(s.personal):(isDark?"rgba(255,255,255,0.07)":"rgba(0,0,0,0.07)"),
                       borderRadius:"3px 3px 0 0",
                       outline:isCurr?`2px solid ${cl.accent}`:"none",
                       opacity:isFuture?0.35:1,
@@ -620,7 +602,6 @@ export default function App() {
               setSettingsForm({commute:String(appData.setup.commute),yearlyBudget:String(appData.setup.yearlyBudget||DEFAULT_BUDGET)});
               setShowSettings(true);
             }}>⚙️</button>
-            <button style={S.btnGhost} className="btn-ghost" onClick={doReset}>איפוס</button>
           </div>
         </div>
 
@@ -666,7 +647,7 @@ export default function App() {
                     {annual.remaining.toLocaleString()}
                   </div>
                   <div style={{fontSize:"13px",color:cl.muted,marginTop:"6px"}}>מתוך <span style={{color:cl.muted2,fontWeight:600}}>{annual.budget.toLocaleString()}</span> ק"מ שנתי</div>
-                  <div style={{background:"rgba(255,255,255,0.05)",borderRadius:"8px",height:"6px",marginTop:"14px",overflow:"hidden"}}>
+                  <div style={{background:isDark?"rgba(255,255,255,0.07)":"rgba(0,0,0,0.07)",borderRadius:"8px",height:"6px",marginTop:"14px",overflow:"hidden"}}>
                     <div className="progress-fill" style={{width:`${annual.pct}%`,height:"100%",borderRadius:"8px",background:annual.pct>90?"linear-gradient(90deg,#f87171,#fca5a5)":annual.pct>70?"linear-gradient(90deg,#fb923c,#fcd34d)":"linear-gradient(90deg,#7c3aed,#a78bfa)"}}/>
                   </div>
                 </div>
@@ -770,7 +751,7 @@ export default function App() {
                       {s.personal.toLocaleString()} ק"מ פרטי
                     </span>
                   </div>
-                  <div style={{background:"rgba(255,255,255,0.05)",borderRadius:"4px",height:"4px",overflow:"hidden"}}>
+                  <div style={{background:isDark?"rgba(255,255,255,0.07)":"rgba(0,0,0,0.07)",borderRadius:"4px",height:"4px",overflow:"hidden"}}>
                     <div style={{width:`${barW}%`,height:"100%",borderRadius:"4px",background:isOver?"linear-gradient(90deg,#f87171,#fca5a5)":"linear-gradient(90deg,#7c3aed,#34d399)",transition:"width 0.6s ease"}}/>
                   </div>
                   <div style={{fontSize:"12px",color:cl.muted,marginTop:"8px",display:"flex",gap:"16px"}}>
@@ -808,6 +789,10 @@ export default function App() {
             {"Notification" in window && Notification.permission==="granted" && (
               <div style={{marginTop:"10px",fontSize:"12px",color:cl.green,textAlign:"center",fontWeight:600}}>✓ התראות פוש מופעלות</div>
             )}
+            <div style={{marginTop:"20px",paddingTop:"16px",borderTop:`1px solid ${cl.border}`}}>
+              <button style={{width:"100%",padding:"12px",borderRadius:"12px",background:cl.redBg,border:`1px solid rgba(220,38,38,0.25)`,color:cl.red,fontSize:"13px",fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}
+                onClick={doReset}>🗑 איפוס כל הנתונים</button>
+            </div>
             <button style={{...S.btnGhost,width:"100%",marginTop:"8px",justifyContent:"center",display:"flex",padding:"12px"}}
               className="btn-ghost" onClick={()=>setShowSettings(false)}>ביטול</button>
           </div>
@@ -845,7 +830,6 @@ export default function App() {
 
       {dayModal && (()=>{
         const {iso, year, month, d} = dayModal;
-        const state = getEffectiveState(iso, year, month, d, uf.dayOverrides);
         const holiday = HOLIDAYS[iso];
         const dayName = DAY_HE[dowOf(year, month, d)];
         const STATE_CFG_MODAL = {
@@ -853,13 +837,14 @@ export default function App() {
           off:     {label:"לא עבדתי", icon:"🏠", color:cl.red,    bg:"rgba(248,113,113,0.15)", border:"rgba(248,113,113,0.4)"},
           holiday: {label:"חג / חופש",icon:"🟡", color:cl.yellow, bg:"rgba(251,191,36,0.13)",  border:"rgba(251,191,36,0.35)"},
         };
+        const cur = modalState;
         return(
           <div className="modal-overlay-anim" onClick={()=>setDayModal(null)}
             style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",backdropFilter:"blur(6px)",zIndex:200,display:"flex",alignItems:"flex-end",direction:"rtl"}}>
             <div className="modal-card-anim" onClick={e=>e.stopPropagation()}
               style={{width:"100%",background:cl.surface,borderRadius:"24px 24px 0 0",padding:"24px 20px 36px",border:`1px solid ${cl.border}`,borderBottom:"none"}}>
               {/* handle */}
-              <div style={{width:"40px",height:"4px",background:"rgba(255,255,255,0.15)",borderRadius:"2px",margin:"0 auto 20px"}}/>
+              <div style={{width:"40px",height:"4px",background:isDark?"rgba(255,255,255,0.15)":"rgba(0,0,0,0.12)",borderRadius:"2px",margin:"0 auto 20px"}}/>
               {/* date header */}
               <div style={{display:"flex",alignItems:"center",gap:"10px",marginBottom:"20px"}}>
                 <div style={{background:cl.surface2,borderRadius:"12px",padding:"10px 14px",textAlign:"center",minWidth:"50px",border:`1px solid ${cl.border}`}}>
@@ -871,16 +856,16 @@ export default function App() {
                   {holiday && <div style={{fontSize:"12px",color:cl.yellow,marginTop:"3px"}}>{holiday}</div>}
                 </div>
               </div>
-              {/* state toggle */}
+              {/* state toggle — select only, save via button */}
               <div style={{fontSize:"11px",fontWeight:700,color:cl.muted,textTransform:"uppercase",letterSpacing:"1px",marginBottom:"8px"}}>סטטוס יום</div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"8px",marginBottom:"20px"}}>
                 {Object.entries(STATE_CFG_MODAL).map(([k,c])=>(
-                  <button key={k} onClick={()=>saveDayModal(k)}
-                    style={{padding:"12px 6px",borderRadius:"12px",border:`2px solid ${state===k?c.border:"transparent"}`,
-                      background:state===k?c.bg:cl.surface2,cursor:"pointer",textAlign:"center",
+                  <button key={k} onClick={()=>setModalState(k)}
+                    style={{padding:"12px 6px",borderRadius:"12px",border:`2px solid ${cur===k?c.border:"transparent"}`,
+                      background:cur===k?c.bg:cl.surface2,cursor:"pointer",textAlign:"center",
                       transition:"all 0.15s",outline:"none",fontFamily:"inherit"}}>
                     <div style={{fontSize:"20px",marginBottom:"4px"}}>{c.icon}</div>
-                    <div style={{fontSize:"11px",fontWeight:700,color:state===k?c.color:cl.muted}}>{c.label}</div>
+                    <div style={{fontSize:"11px",fontWeight:700,color:cur===k?c.color:cl.muted}}>{c.label}</div>
                   </button>
                 ))}
               </div>
@@ -900,7 +885,7 @@ export default function App() {
               </p>
               <div style={{display:"flex",gap:"10px"}}>
                 <button className="btn-main" style={{...S.btn,marginTop:0,flex:1}}
-                  onClick={()=>saveDayModal(state)}>שמור ✓</button>
+                  onClick={()=>saveDayModal(cur)}>שמור ✓</button>
                 <button style={{...S.btnGhost,padding:"14px 18px",fontSize:"14px"}}
                   className="btn-ghost" onClick={()=>setDayModal(null)}>ביטול</button>
               </div>

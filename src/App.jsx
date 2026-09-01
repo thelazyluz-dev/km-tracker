@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import "./App.css";
 
 const KEY = "km_v5";
@@ -57,6 +57,25 @@ function getYearMonths(yearStart) {
     const t=(sm-1)+i, yr=sy+Math.floor(t/12), mo=t%12;
     return {year:yr,month:mo,key:mKey(yr,mo)};
   });
+}
+
+// Sunday-anchored week key (Israeli week)
+function weekStartOf(dt){
+  const t=new Date(dt.getFullYear(),dt.getMonth(),dt.getDate());
+  t.setDate(t.getDate()-t.getDay());
+  return t;
+}
+function weekKeyOf(dt){
+  const s=weekStartOf(dt);
+  return toISO(s.getFullYear(),s.getMonth(),s.getDate());
+}
+
+// Great-circle distance in metres
+function distanceM(lat1,lng1,lat2,lng2){
+  const R=6371000, rad=x=>x*Math.PI/180;
+  const dLat=rad(lat2-lat1), dLng=rad(lng2-lng1);
+  const a=Math.sin(dLat/2)**2+Math.cos(rad(lat1))*Math.cos(rad(lat2))*Math.sin(dLng/2)**2;
+  return 2*R*Math.asin(Math.min(1,Math.sqrt(a)));
 }
 
 function loadData() { try{return JSON.parse(localStorage.getItem(KEY));}catch{return null;} }
@@ -171,15 +190,49 @@ export default function App() {
   const [sf, setSf] = useState({yearStart:`${today.getFullYear()}-01-01`,startOdo:"",commute:"62",yearlyBudget:String(DEFAULT_BUDGET)});
 
   const [uf, setUf] = useState({year:today.getFullYear(),month:today.getMonth(),odometer:"",dayOverrides:{},dailyLogs:{}});
+  const [showCalendar, setShowCalendar] = useState(false);
+  // Synchronous mirror of `uf` — lets rapid stepper taps read the freshest value
+  const ufRef = useRef(uf);
+  ufRef.current = uf;
   const [dayModal, setDayModal] = useState(null); // {iso, year, month, d}
   const [modalOdo, setModalOdo] = useState("");
   const [modalState, setModalState] = useState(null);
+
+  const [didAutoCheckin,setDidAutoCheckin]=useState(false);
 
   useEffect(()=>{
     const d=loadData();
     setAppData(d);
     setScreen(d?.setup?"main":"setup");
+    // Early in the month you're usually here to close out the month that just
+    // ended — open that one instead of a nearly-empty current month.
+    if(d?.setup && today.getDate()<=5){
+      const pm=new Date(today.getFullYear(),today.getMonth()-1,1);
+      const pk=mKey(pm.getFullYear(),pm.getMonth());
+      const inYear=getYearMonths(d.setup.yearStart).some(m=>m.key===pk);
+      if(inYear && !d.months?.[pk]?.odometer){
+        const ex=migrateEntry(d.months?.[pk]);
+        setUf({year:pm.getFullYear(),month:pm.getMonth(),odometer:"",
+               dayOverrides:ex?.dayOverrides||{},dailyLogs:ex?.dailyLogs||{}});
+      }
+    }
   },[]);
+
+  // Silent GPS check-in on app open (and via ?checkin=1 from an iOS Shortcut).
+  // A Service Worker can't read GPS, so this is the closest thing to automatic:
+  // opening the app while at work marks the day for you.
+  useEffect(()=>{
+    if(didAutoCheckin||!appData?.setup?.workLocation) return;
+    setDidAutoCheckin(true);
+    const forced=new URLSearchParams(window.location.search).has("checkin");
+    if(appData.lastAutoCheckin===todayISO&&!forced) return;
+    checkInNow(!forced);
+    if(forced){
+      const u=new URL(window.location.href);
+      u.searchParams.delete("checkin");
+      window.history.replaceState({},"",u);
+    }
+  },[appData,didAutoCheckin,todayISO]);
 
   // Register Service Worker
   useEffect(()=>{
@@ -228,34 +281,225 @@ export default function App() {
     syncStateToSW(appData, todayKey);
   }
 
+  // Async-safe persist — always builds on the freshest state
+  function persistWith(updater){
+    setAppData(prev=>{
+      const next=updater(prev);
+      if(!next) return prev;
+      saveData(next);
+      setTimeout(()=>syncStateToSW(next,null),300);
+      return next;
+    });
+  }
+
   function showToast(msg,color=cl.green){
     setToast({msg,color});
     setTimeout(()=>setToast(null),2500);
   }
 
-  const getPrevOdo = useCallback((year,month)=>{
-    if(!appData?.setup) return 0;
-    const months=getYearMonths(appData.setup.yearStart);
-    let prev=appData.setup.startOdometer;
-    for(const {year:yr,month:mo,key} of months){
-      if(yr===year&&mo===month) break;
-      if(appData.months?.[key]?.odometer) prev=appData.months[key].odometer;
+  // ── Set a single day's state directly in stored data ──────────────────
+  function setDayState(y,m,d,state){
+    const iso=toISO(y,m,d), mk=mKey(y,m), def=getDefaultState(iso,y,m,d);
+    const apply=(src)=>{ const ov={...src}; if(state===def) delete ov[iso]; else ov[iso]=state; return ov; };
+    // update the synchronous mirror first so back-to-back calls compound
+    if(ufRef.current.year===y&&ufRef.current.month===m){
+      ufRef.current={...ufRef.current,dayOverrides:apply(ufRef.current.dayOverrides)};
     }
-    return prev;
+    persistWith(prev=>{
+      if(!prev?.setup) return prev;
+      const ex=migrateEntry(prev.months?.[mk])||{dayOverrides:{},dailyLogs:{}};
+      return {...prev,months:{...(prev.months||{}),[mk]:{...ex,dayOverrides:apply(ex.dayOverrides||{})}}};
+    });
+    setUf(p=>(p.year!==y||p.month!==m)?p:{...p,dayOverrides:apply(p.dayOverrides)});
+  }
+
+  // ── Workday stepper: nudge the count without opening the calendar ─────
+  // Reads through ufRef so rapid taps compound instead of fighting a stale render.
+  function adjustWorkDays(delta){
+    const {year,month}=ufRef.current;
+    const mk=mKey(year,month);
+    const maxD=mk===todayKey?today.getDate():daysInMonth(year,month);
+    const ov=ufRef.current.dayOverrides;
+    let target=null;
+    if(delta<0){
+      for(let d=maxD;d>=1&&!target;d--){
+        const iso=toISO(year,month,d);
+        if(getEffectiveState(iso,year,month,d,ov)==="work") target={d,state:"off"};
+      }
+    }else{
+      // prefer undoing a previous "off" on a normal workday
+      for(let d=maxD;d>=1&&!target;d--){
+        const iso=toISO(year,month,d);
+        if(ov[iso]&&ov[iso]!=="work"&&getDefaultState(iso,year,month,d)==="work") target={d,state:"work"};
+      }
+      for(let d=maxD;d>=1&&!target;d--){
+        const iso=toISO(year,month,d);
+        if(getEffectiveState(iso,year,month,d,ov)!=="work") target={d,state:"work"};
+      }
+    }
+    if(target) setDayState(year,month,target.d,target.state);
+  }
+
+  // ── Weekly check-in: "how many days did you drive this week?" ─────────
+  function applyWeeklyCheckin(count){
+    const sunday=weekStartOf(today);
+    const days=[];
+    for(let i=0;i<=today.getDay();i++){
+      const dt=new Date(sunday.getFullYear(),sunday.getMonth(),sunday.getDate()+i);
+      const y=dt.getFullYear(),m=dt.getMonth(),d=dt.getDate();
+      days.push({y,m,d,iso:toISO(y,m,d),mk:mKey(y,m)});
+    }
+    if(!appData?.setup) return;
+    const months={...(appData.months||{})};
+    for(const x of days) months[x.mk]=migrateEntry(months[x.mk])||{dayOverrides:{},dailyLogs:{}};
+    // clear this week's overrides so a re-answer replaces the previous one
+    for(const x of days){
+      const ov={...(months[x.mk].dayOverrides||{})};
+      delete ov[x.iso];
+      months[x.mk]={...months[x.mk],dayOverrides:ov};
+    }
+    const defWork=days.filter(x=>getDefaultState(x.iso,x.y,x.m,x.d)==="work");
+    // fewer days than the default → mark the latest workdays as off
+    for(let i=0;i<Math.max(0,defWork.length-count);i++){
+      const x=defWork[defWork.length-1-i];
+      months[x.mk]={...months[x.mk],dayOverrides:{...months[x.mk].dayOverrides,[x.iso]:"off"}};
+    }
+    // more days than the default → promote weekend/holiday days
+    const nonWork=days.filter(x=>getDefaultState(x.iso,x.y,x.m,x.d)!=="work");
+    for(let i=0;i<Math.max(0,count-defWork.length)&&i<nonWork.length;i++){
+      const x=nonWork[i];
+      months[x.mk]={...months[x.mk],dayOverrides:{...months[x.mk].dayOverrides,[x.iso]:"work"}};
+    }
+    persist({...appData,months,lastWeekLogged:weekKeyOf(today)});
+    // keep the edit form in sync if it's showing an affected month
+    const ufMk=mKey(uf.year,uf.month);
+    if(months[ufMk]) setUf(p=>({...p,dayOverrides:months[ufMk].dayOverrides||{}}));
+    showToast(`נרשמו ${count} ימי עבודה השבוע ✓`);
+  }
+
+  function skipWeeklyCheckin(){
+    persistWith(prev=>prev?{...prev,lastWeekLogged:weekKeyOf(today)}:prev);
+  }
+
+  // ── GPS ──────────────────────────────────────────────────────────────
+  function saveWorkLocation(){
+    if(!navigator.geolocation){ showToast("הדפדפן לא תומך במיקום",cl.red); return; }
+    showToast("קורא מיקום…",cl.blue);
+    navigator.geolocation.getCurrentPosition(
+      pos=>{
+        persistWith(prev=>prev?{...prev,setup:{...prev.setup,
+          workLocation:{lat:pos.coords.latitude,lng:pos.coords.longitude,radius:400}}}:prev);
+        showToast("מיקום העבודה נשמר ✓");
+      },
+      ()=>showToast("לא ניתנה הרשאת מיקום",cl.red),
+      {enableHighAccuracy:true,timeout:12000,maximumAge:0}
+    );
+  }
+
+  function checkInNow(silent=false){
+    const wl=appData?.setup?.workLocation;
+    if(!wl||!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      pos=>{
+        const dist=distanceM(pos.coords.latitude,pos.coords.longitude,wl.lat,wl.lng);
+        if(dist<=(wl.radius||400)){
+          setDayState(today.getFullYear(),today.getMonth(),today.getDate(),"work");
+          persistWith(prev=>prev?{...prev,lastAutoCheckin:todayISO}:prev);
+          showToast("זוהית בעבודה — היום סומן ✓");
+        }else if(!silent){
+          showToast(`אתה ${dist>1500?`${(dist/1000).toFixed(1)} ק״מ`:`${Math.round(dist)} מ׳`} מהעבודה`,cl.orange);
+        }
+      },
+      ()=>{ if(!silent) showToast("לא ניתן לקרוא מיקום",cl.red); },
+      {enableHighAccuracy:false,timeout:12000,maximumAge:120000}
+    );
+  }
+
+  // ── Backup / restore ─────────────────────────────────────────────────
+  function exportJSON(){
+    if(!appData) return;
+    const blob=new Blob([JSON.stringify(appData,null,2)],{type:"application/json"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    a.href=url; a.download=`8-400-backup-${todayISO}.json`; a.click();
+    URL.revokeObjectURL(url);
+    showToast("גיבוי הורד ✓");
+  }
+
+  function importJSON(file){
+    if(!file) return;
+    const reader=new FileReader();
+    reader.onload=e=>{
+      try{
+        const d=JSON.parse(e.target.result);
+        if(!d?.setup?.yearStart) throw new Error("invalid");
+        if(!window.confirm("לשחזר את הגיבוי? כל הנתונים הנוכחיים יוחלפו.")) return;
+        persist(d); setShowSettings(false); showToast("הנתונים שוחזרו ✓");
+      }catch{ showToast("קובץ גיבוי לא תקין",cl.red); }
+    };
+    reader.readAsText(file);
+  }
+
+  // ── Start a new tracking year ────────────────────────────────────────
+  function startNewYear(){
+    if(!appData?.setup) return;
+    const months=getYearMonths(appData.setup.yearStart);
+    const lastRec=[...months].reverse().find(m=>appData.months?.[m.key]?.odometer);
+    const startOdometer=lastRec?appData.months[lastRec.key].odometer:appData.setup.startOdometer;
+    const [sy,sm,sd]=appData.setup.yearStart.split("-").map(Number);
+    const newStart=`${sy+1}-${String(sm).padStart(2,"0")}-${String(sd).padStart(2,"0")}`;
+    if(!window.confirm(`להתחיל שנה חדשה מ-${newStart}?\nהשנה הקודמת תישמר בארכיון.`)) return;
+    persistWith(prev=>({
+      ...prev,
+      setup:{...prev.setup,yearStart:newStart,startOdometer},
+      months:{},
+      archive:[...(prev.archive||[]),{yearStart:prev.setup.yearStart,months:prev.months||{},
+               budget:prev.setup.yearlyBudget||DEFAULT_BUDGET}],
+    }));
+    setUf({year:today.getFullYear(),month:today.getMonth(),odometer:"",dayOverrides:{},dailyLogs:{}});
+    showToast("שנה חדשה החלה ✓");
+  }
+
+  // Returns the last recorded odometer before this month, plus any months that
+  // were skipped since then — their km are folded into this month's total, so
+  // their workdays must be counted too or personal km get wildly inflated.
+  const getPrevInfo = useCallback((year,month)=>{
+    if(!appData?.setup) return {odo:0,gapMonths:[]};
+    const months=getYearMonths(appData.setup.yearStart);
+    let prev=appData.setup.startOdometer, gap=[];
+    for(const m of months){
+      if(m.year===year&&m.month===month) break;
+      if(appData.months?.[m.key]?.odometer){ prev=appData.months[m.key].odometer; gap=[]; }
+      else gap.push(m);
+    }
+    return {odo:prev,gapMonths:gap};
+  },[appData]);
+
+  const getPrevOdo = useCallback((year,month)=>getPrevInfo(year,month).odo,[getPrevInfo]);
+
+  // Workdays for a month, plus those of any skipped months folded into it
+  const workDaysFor = useCallback((year,month,overrides,gapMonths)=>{
+    let n=countWorkdays(year,month,overrides||{});
+    for(const g of (gapMonths||[])){
+      const ge=migrateEntry(appData?.months?.[g.key]);
+      n+=countWorkdays(g.year,g.month,ge?.dayOverrides||{});
+    }
+    return n;
   },[appData]);
 
   const calcMonth = useCallback((year,month)=>{
     const mk=mKey(year,month);
     const entry=appData?.months?.[mk];
     if(!entry?.odometer) return null;
-    const prevOdo=getPrevOdo(year,month);
+    const {odo:prevOdo,gapMonths}=getPrevInfo(year,month);
     const totalKm=entry.odometer-prevOdo;
     const me=migrateEntry(entry);
-    const workDays=countWorkdays(year,month,me.dayOverrides||{});
+    const workDays=workDaysFor(year,month,me.dayOverrides||{},gapMonths);
     const workKm=workDays*(appData.setup.commute||62);
     const personal=Math.max(0,totalKm-workKm);
-    return {totalKm,workDays,workKm,personal,odometer:entry.odometer,dayOverrides:me.dayOverrides||{}};
-  },[appData,getPrevOdo]);
+    return {totalKm,workDays,workKm,personal,odometer:entry.odometer,
+            dayOverrides:me.dayOverrides||{},gapMonths};
+  },[appData,getPrevInfo,workDaysFor]);
 
   const annual=useMemo(()=>{
     if(!appData?.setup) return null;
@@ -272,26 +516,59 @@ export default function App() {
     const allowance=monthsLeft>0?Math.round(remaining/monthsLeft):0;
     const pct=Math.min(100,Math.round(totalPersonal/budget*100));
     const maxPersonal=Math.max(1,...Object.values(byMonth).map(s=>s.personal));
-    return {totalPersonal,remaining,monthsLeft,allowance,pct,byMonth,months,budget,maxPersonal};
-  },[appData,todayKey,calcMonth]);
+
+    // Forecast: extrapolate the average of recorded months over the whole year
+    const recorded=Object.values(byMonth);
+    const avg=recorded.length?totalPersonal/recorded.length:0;
+    const projected=Math.round(avg*12);
+    const overBy=projected-budget;
+
+    // Year boundary: has the tracked 12-month window finished?
+    const lastKey=months[months.length-1].key;
+    const yearEnded=todayKey>lastKey;
+
+    // Daily budget for the rest of the current month
+    const dim=daysInMonth(today.getFullYear(),today.getMonth());
+    const daysLeftInMonth=Math.max(1,dim-today.getDate()+1);
+    const perDay=Math.round(allowance/daysLeftInMonth);
+
+    // Precision only matters near the limit — one workday is worth `commute` km
+    const commute=appData.setup.commute||62;
+    const oneDayShare=remaining>0?(commute/remaining):1;
+    const precisionMatters=pct>=65||oneDayShare>0.08;
+
+    return {totalPersonal,remaining,monthsLeft,allowance,pct,byMonth,months,budget,
+            maxPersonal,projected,overBy,avg,yearEnded,lastKey,perDay,daysLeftInMonth,
+            precisionMatters,recordedCount:recorded.length,commute};
+  },[appData,todayKey,calcMonth,today]);
+
+  // Workdays in the currently-edited month, counted only up to today when the
+  // month is still running (a mid-month reading can't include future commutes).
+  const ufWorkDays=useMemo(()=>{
+    const mk=mKey(uf.year,uf.month);
+    const upTo=mk<todayKey?daysInMonth(uf.year,uf.month):mk===todayKey?today.getDate():0;
+    let n=0;
+    for(let d=1;d<=upTo;d++){
+      const iso=toISO(uf.year,uf.month,d);
+      if(getEffectiveState(iso,uf.year,uf.month,d,uf.dayOverrides)==="work") n++;
+    }
+    return n;
+  },[uf.year,uf.month,uf.dayOverrides,todayKey,today]);
 
   const livePreview=useMemo(()=>{
     if(!appData?.setup||!uf.odometer) return null;
-    const prevOdo=getPrevOdo(uf.year,uf.month);
+    const {odo:prevOdo,gapMonths}=getPrevInfo(uf.year,uf.month);
     const totalKm=Number(uf.odometer)-prevOdo;
     if(totalKm<0||isNaN(totalKm)) return null;
-    // Past month → count all days. Current month → count up to today. Future → 0.
-    const mk=mKey(uf.year,uf.month);
-    const upToDay=mk<todayKey?daysInMonth(uf.year,uf.month):mk===todayKey?today.getDate():0;
-    let workDays=0;
-    for(let d=1;d<=upToDay;d++){
-      const iso=toISO(uf.year,uf.month,d);
-      if(getEffectiveState(iso,uf.year,uf.month,d,uf.dayOverrides)==="work") workDays++;
+    let workDays=ufWorkDays;
+    for(const g of gapMonths){
+      const ge=migrateEntry(appData?.months?.[g.key]);
+      workDays+=countWorkdays(g.year,g.month,ge?.dayOverrides||{});
     }
     const workKm=workDays*(appData.setup.commute||62);
     const personal=Math.max(0,totalKm-workKm);
-    return {totalKm,workDays,workKm,personal,prevOdo};
-  },[uf.odometer,uf.dayOverrides,uf.year,uf.month,appData,getPrevOdo,todayKey,today]);
+    return {totalKm,workDays,workKm,personal,prevOdo,gapMonths};
+  },[uf.odometer,uf.year,uf.month,appData,getPrevInfo,ufWorkDays]);
 
   const liveFromLogs=useMemo(()=>{
     const logs=uf.dailyLogs||{};
@@ -365,6 +642,16 @@ export default function App() {
     if(Number(uf.odometer)<prevOdo){
       alert("קריאת המד לא יכולה להיות קטנה מהקריאה הקודמת ("+prevOdo+")");
       return;
+    }
+    // Typo guard — a mistyped digit can silently wipe out the whole budget
+    if(livePreview){
+      const spanMonths=1+(livePreview.gapMonths?.length||0);
+      if(livePreview.totalKm>spanMonths*7000){
+        const ok=window.confirm(
+          `הקריאה מראה ${livePreview.totalKm.toLocaleString()} ק״מ ב-${spanMonths===1?"חודש":`${spanMonths} חודשים`}.\n`+
+          `זה נראה גבוה מאוד — אולי נפלה טעות הקלדה?\n\nלשמור בכל זאת?`);
+        if(!ok) return;
+      }
     }
     if(livePreview&&annual&&annual.allowance>0&&livePreview.personal>annual.allowance*1.2){
       const ok=window.confirm(`ק"מ פרטיים (${livePreview.personal}) חורגים ב-20% מהמכסה החודשית (${annual.allowance}).\nלשמור בכל זאת?`);
@@ -613,7 +900,44 @@ export default function App() {
 
         {tab==="dashboard" && (
           <div className="tab-content">
-            {annual && !annual.byMonth[todayKey] && reminderDismissed!==todayKey && (
+            {/* Year finished → roll over */}
+            {annual?.yearEnded && (
+              <div className="reminder-banner km-card" style={{...S.card,background:cl.accentBg,
+                border:`1px solid ${cl.accent}44`,marginBottom:"14px"}}>
+                <div style={{fontWeight:700,fontSize:"15px",color:cl.accent,marginBottom:"6px"}}>🎉 שנת המדידה הסתיימה</div>
+                <div style={{fontSize:"13px",color:cl.muted2,lineHeight:"1.6",marginBottom:"14px"}}>
+                  סיימת עם <strong style={{color:cl.text}}>{annual.totalPersonal.toLocaleString()}</strong> ק״מ פרטי
+                  מתוך {annual.budget.toLocaleString()}. אפשר להתחיל שנה חדשה — הנתונים יישמרו בארכיון.
+                </div>
+                <button className="btn-main" style={{...S.btn,marginTop:0}} onClick={startNewYear}>
+                  התחל שנה חדשה ←
+                </button>
+              </div>
+            )}
+
+            {/* Weekly check-in — one tap beats remembering a month back */}
+            {annual && !annual.yearEnded && today.getDay()>=4 && appData?.lastWeekLogged!==weekKeyOf(today) && (
+              <div className="reminder-banner km-card" style={{...S.card,background:cl.greenBg,
+                border:`1px solid ${cl.green}44`,marginBottom:"14px"}}>
+                <div style={{fontWeight:700,fontSize:"15px",color:cl.green,marginBottom:"4px"}}>📅 סיכום שבועי</div>
+                <div style={{fontSize:"13px",color:cl.muted2,lineHeight:"1.6",marginBottom:"14px"}}>
+                  כמה ימים נסעת לעבודה השבוע?
+                </div>
+                <div style={{display:"flex",gap:"7px"}}>
+                  {[0,1,2,3,4,5].map(n=>(
+                    <button key={n} onClick={()=>applyWeeklyCheckin(n)}
+                      style={{flex:1,padding:"14px 0",borderRadius:"12px",border:`1px solid ${cl.green}55`,
+                        background:cl.surface,color:cl.text,fontSize:"17px",fontWeight:800,
+                        cursor:"pointer",fontFamily:"inherit"}}>{n}</button>
+                  ))}
+                </div>
+                <button style={{...S.btnGhost,width:"100%",marginTop:"10px",display:"flex",
+                  justifyContent:"center",padding:"10px"}} className="btn-ghost"
+                  onClick={skipWeeklyCheckin}>דלג השבוע</button>
+              </div>
+            )}
+
+            {annual && !annual.yearEnded && !annual.byMonth[todayKey] && reminderDismissed!==todayKey && (
               <div className="reminder-banner km-card" style={{...S.card,background:"rgba(251,191,36,0.07)",border:"1px solid rgba(251,191,36,0.2)",display:"flex",alignItems:"flex-start",gap:"14px",marginBottom:"14px"}}>
                 <span style={{fontSize:"22px",lineHeight:1,marginTop:"2px"}}>🔔</span>
                 <div style={{flex:1}}>
@@ -665,7 +989,47 @@ export default function App() {
               <div style={{fontSize:"12px",color:cl.muted,marginTop:"6px"}}>
                 יתרת ק״מ מחולקת בין {annual.monthsLeft} חודשים — מהחודש הנוכחי עד סוף השנה
               </div>
+              <div style={{marginTop:"14px",paddingTop:"14px",borderTop:`1px solid ${cl.border}`,
+                display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <span style={{fontSize:"13px",color:cl.muted2}}>נשארו {annual.daysLeftInMonth} ימים בחודש</span>
+                <span style={S.badge(cl.blue,cl.blueBg)}>≈ {annual.perDay.toLocaleString()} ק״מ ליום</span>
+              </div>
             </div>
+
+            {/* Forecast — where this year lands at the current pace */}
+            {annual.recordedCount>=2 && (
+              <div className="km-card" style={{...S.card,
+                background:annual.overBy>0?cl.redBg:cl.greenBg,
+                border:`1px solid ${annual.overBy>0?cl.red:cl.green}33`}}>
+                <div style={S.sectionTitle}>תחזית לסוף השנה</div>
+                <div style={{display:"flex",alignItems:"flex-end",gap:"8px"}}>
+                  <div className="stat-num" style={{fontSize:"36px",fontWeight:800,lineHeight:1,
+                    color:annual.overBy>0?cl.red:cl.green}}>
+                    {annual.projected.toLocaleString()}
+                  </div>
+                  <div style={{fontSize:"13px",color:cl.muted,marginBottom:"5px"}}>ק"מ</div>
+                </div>
+                <div style={{fontSize:"13px",color:cl.muted2,marginTop:"8px",lineHeight:"1.6"}}>
+                  {annual.overBy>0
+                    ? <>בקצב הנוכחי תחרוג ב-<strong style={{color:cl.red}}>{annual.overBy.toLocaleString()}</strong> ק״מ.
+                        כדאי לרדת ל-{Math.max(0,annual.allowance).toLocaleString()} ק״מ בחודש.</>
+                    : <>אתה בכיוון טוב — צפוי להישאר עם <strong style={{color:cl.green}}>{Math.abs(annual.overBy).toLocaleString()}</strong> ק״מ עודפים.</>}
+                  <span style={{color:cl.muted}}> (ממוצע {Math.round(annual.avg).toLocaleString()} ק״מ לחודש)</span>
+                </div>
+              </div>
+            )}
+
+            {/* Tell the user when precision doesn't matter — removes the guilt */}
+            {!annual.precisionMatters && annual.recordedCount>=1 && (
+              <div style={{...S.card,background:cl.greenBg,border:`1px solid ${cl.green}33`,
+                display:"flex",gap:"12px",alignItems:"flex-start"}}>
+                <span style={{fontSize:"20px",lineHeight:1,marginTop:"1px"}}>✅</span>
+                <div style={{fontSize:"13px",color:cl.muted2,lineHeight:"1.6"}}>
+                  <strong style={{color:cl.green}}>אתה רחוק מהגבול</strong> — לא צריך לדייק בספירת הימים.
+                  יום עבודה אחד שווה {annual.commute} ק״מ, פחות מ-8% מהיתרה שלך.
+                </div>
+              </div>
+            )}
             <div className="km-card" style={S.card}>
               <div style={S.sectionTitle}>ק"מ פרטי לפי חודש</div>
               {renderBarChart()}
@@ -687,12 +1051,60 @@ export default function App() {
               </div>
               <button style={S.btnGhost} className="btn-ghost" onClick={()=>navigateMonth(1)}>←</button>
             </div>
+            {livePreview?.gapMonths?.length>0 && (
+              <div style={{padding:"12px 14px",borderRadius:"12px",background:cl.yellowBg,
+                border:"1px solid rgba(251,191,36,0.3)",marginBottom:"16px",fontSize:"12px",
+                color:cl.yellow,lineHeight:"1.6"}}>
+                ⚠️ לא עודכן {livePreview.gapMonths.map(g=>MONTH_HE[g.month]).join(", ")} —
+                הק״מ של {livePreview.gapMonths.length>1?"החודשים האלה":"החודש הזה"} נכללים כאן,
+                וימי העבודה שלהם נספרים יחד.
+              </div>
+            )}
+
             <label style={{...S.label,marginTop:0}}>קריאת מד נוכחית (ק"מ)</label>
             <input style={S.input} type="number" placeholder="למשל: 47250" value={uf.odometer} onChange={e=>setUf({...uf,odometer:e.target.value})}/>
 
-            <label style={S.label}>ימי עבודה / חופש</label>
-            <p style={{...S.hint,marginTop:"-6px",marginBottom:"8px"}}>לחץ על כל יום כדי לשנות את סטטוסו</p>
-            {renderCalendar()}
+            {/* Workday count — the primary input. The calendar is optional detail. */}
+            <label style={S.label}>כמה ימים נסעת לעבודה?</label>
+            <div style={{display:"flex",alignItems:"center",gap:"14px",background:cl.surface2,
+              borderRadius:"14px",padding:"14px 18px",border:`1px solid ${cl.border}`}}>
+              <button className="btn-ghost" onClick={()=>adjustWorkDays(-1)} disabled={ufWorkDays<=0}
+                style={{width:"46px",height:"46px",borderRadius:"12px",border:`1px solid ${cl.border}`,
+                  background:"transparent",color:ufWorkDays<=0?cl.muted:cl.text,fontSize:"24px",
+                  cursor:ufWorkDays<=0?"default":"pointer",fontFamily:"inherit",lineHeight:1,
+                  opacity:ufWorkDays<=0?0.4:1}}>−</button>
+              <div style={{flex:1,textAlign:"center"}}>
+                <div className="stat-num" style={{fontSize:"38px",fontWeight:800,color:cl.text,lineHeight:1}}>{ufWorkDays}</div>
+                <div style={{fontSize:"11px",color:cl.muted,marginTop:"4px"}}>ימי עבודה</div>
+              </div>
+              <button className="btn-ghost" onClick={()=>adjustWorkDays(1)}
+                style={{width:"46px",height:"46px",borderRadius:"12px",border:`1px solid ${cl.border}`,
+                  background:"transparent",color:cl.text,fontSize:"24px",cursor:"pointer",
+                  fontFamily:"inherit",lineHeight:1}}>+</button>
+            </div>
+            <p style={{...S.hint,marginTop:"8px"}}>
+              {mKey(uf.year,uf.month)===todayKey
+                ? "נספר עד היום. ברירת המחדל: א׳–ה׳ עבודה, שישי־שבת וחגים חופש."
+                : "ברירת המחדל: א׳–ה׳ עבודה, שישי־שבת וחגים חופש."}
+            </p>
+
+            {appData?.setup?.workLocation && mKey(uf.year,uf.month)===todayKey && (
+              <button className="btn-ghost" onClick={()=>checkInNow(false)}
+                style={{width:"100%",marginTop:"10px",padding:"13px",borderRadius:"12px",
+                  border:`1px solid ${cl.border}`,background:cl.accentBg,color:cl.accent,
+                  fontSize:"13px",fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+                📍 אני בעבודה עכשיו — סמן את היום
+              </button>
+            )}
+
+            <button className="btn-ghost" onClick={()=>setShowCalendar(v=>!v)}
+              style={{width:"100%",marginTop:"14px",padding:"12px",borderRadius:"12px",
+                border:`1px solid ${cl.border}`,background:"transparent",color:cl.muted2,
+                fontSize:"13px",cursor:"pointer",fontFamily:"inherit"}}>
+              {showCalendar?"▲ הסתר לוח שנה":"▼ פתח לוח שנה — לסמן ימים מדויקים"}
+            </button>
+
+            {showCalendar && <div style={{marginTop:"16px"}}>{renderCalendar()}</div>}
 
             {livePreview && (
               <div style={{marginTop:"16px",padding:"16px",background:cl.surface2,borderRadius:"14px",display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"8px",border:`1px solid ${cl.border}`}}>
@@ -767,7 +1179,7 @@ export default function App() {
 
       {showSettings && (
         <div className="modal-overlay-anim" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",backdropFilter:"blur(8px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:100,padding:"20px",direction:"rtl"}}>
-          <div className="modal-card-anim" style={{...S.card,width:"100%",maxWidth:"360px",marginBottom:0,border:"1px solid rgba(167,139,250,0.2)"}}>
+          <div className="modal-card-anim" style={{...S.card,width:"100%",maxWidth:"360px",marginBottom:0,border:"1px solid rgba(167,139,250,0.2)",maxHeight:"88vh",overflowY:"auto"}}>
             <div style={{fontSize:"18px",fontWeight:800,color:cl.text,marginBottom:"4px"}}>הגדרות</div>
             <div style={{fontSize:"12px",color:cl.muted,marginBottom:"20px"}}>עריכת פרמטרי חישוב</div>
             <label style={{...S.label,marginTop:0}}>הלוך-חזור לעבודה (ק"מ ביום)</label>
@@ -789,6 +1201,53 @@ export default function App() {
             {"Notification" in window && Notification.permission==="granted" && (
               <div style={{marginTop:"10px",fontSize:"12px",color:cl.green,textAlign:"center",fontWeight:600}}>✓ התראות פוש מופעלות</div>
             )}
+            {/* GPS work location */}
+            <div style={{marginTop:"22px",paddingTop:"18px",borderTop:`1px solid ${cl.border}`}}>
+              <div style={{...S.sectionTitle,marginBottom:"6px"}}>זיהוי אוטומטי לפי מיקום</div>
+              <div style={{fontSize:"12px",color:cl.muted,lineHeight:"1.6",marginBottom:"12px"}}>
+                {appData?.setup?.workLocation
+                  ? "מיקום העבודה שמור. כל פתיחה של האפליקציה בזמן שאתה בעבודה תסמן את היום אוטומטית."
+                  : "שמור את מיקום העבודה (בזמן שאתה שם) — ואז כל פתיחה של האפליקציה בעבודה תסמן את היום לבד."}
+              </div>
+              <button className="btn-ghost"
+                style={{width:"100%",padding:"13px",borderRadius:"12px",
+                  border:`1px solid ${appData?.setup?.workLocation?cl.green+"55":cl.border}`,
+                  background:appData?.setup?.workLocation?cl.greenBg:"transparent",
+                  color:appData?.setup?.workLocation?cl.green:cl.muted2,
+                  fontSize:"13px",fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}
+                onClick={saveWorkLocation}>
+                {appData?.setup?.workLocation?"📍 עדכן את מיקום העבודה":"📍 שמור את מיקום העבודה"}
+              </button>
+              {appData?.setup?.workLocation && (
+                <p style={{fontSize:"11px",color:cl.muted,marginTop:"10px",lineHeight:"1.6"}}>
+                  💡 ב-iOS אפשר ליצור קיצור דרך: אוטומציה ← "בהגעה למיקום" ← פתח כתובת אתר עם
+                  <code style={{background:cl.surface2,padding:"1px 5px",borderRadius:"4px",margin:"0 3px"}}>?checkin=1</code>
+                  והיום יסומן לבד.
+                </p>
+              )}
+            </div>
+
+            {/* Backup / restore */}
+            <div style={{marginTop:"22px",paddingTop:"18px",borderTop:`1px solid ${cl.border}`}}>
+              <div style={{...S.sectionTitle,marginBottom:"6px"}}>גיבוי ושחזור</div>
+              <div style={{fontSize:"12px",color:cl.muted,lineHeight:"1.6",marginBottom:"12px"}}>
+                הנתונים שמורים רק בדפדפן הזה. ניקוי היסטוריה או החלפת טלפון ימחקו אותם — כדאי לגבות.
+              </div>
+              <div style={{display:"flex",gap:"8px"}}>
+                <button className="btn-ghost" onClick={exportJSON}
+                  style={{flex:1,padding:"13px",borderRadius:"12px",border:`1px solid ${cl.border}`,
+                    background:"transparent",color:cl.muted2,fontSize:"13px",fontWeight:700,
+                    cursor:"pointer",fontFamily:"inherit"}}>⬇ גבה</button>
+                <label style={{flex:1,padding:"13px",borderRadius:"12px",border:`1px solid ${cl.border}`,
+                  background:"transparent",color:cl.muted2,fontSize:"13px",fontWeight:700,
+                  cursor:"pointer",fontFamily:"inherit",textAlign:"center"}}>
+                  ⬆ שחזר
+                  <input type="file" accept="application/json,.json" style={{display:"none"}}
+                    onChange={e=>{importJSON(e.target.files?.[0]); e.target.value="";}}/>
+                </label>
+              </div>
+            </div>
+
             <div style={{marginTop:"20px",paddingTop:"16px",borderTop:`1px solid ${cl.border}`}}>
               <button style={{width:"100%",padding:"12px",borderRadius:"12px",background:cl.redBg,border:`1px solid rgba(220,38,38,0.25)`,color:cl.red,fontSize:"13px",fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}
                 onClick={doReset}>🗑 איפוס כל הנתונים</button>

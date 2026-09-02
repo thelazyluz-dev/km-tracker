@@ -62,8 +62,28 @@ input[type=date]::-webkit-calendar-picker-indicator {
   input[type=date]::-webkit-calendar-picker-indicator { filter: none; opacity: 0.55; }
 }
 
-/* ── Tab content ── */
-.tab-content { animation: fadeSlideIn 0.22s ease both; }
+/* ── Tab content ──
+   Direction-aware: in RTL a "next" tab lives to the left, so it should
+   enter from the left. Falls back to a plain fade for reduced motion. */
+@keyframes tabInFromStart { from { opacity:0; transform:translateX(22px); } to { opacity:1; transform:none; } }
+@keyframes tabInFromEnd   { from { opacity:0; transform:translateX(-22px); } to { opacity:1; transform:none; } }
+
+.tab-content            { animation: fadeSlideIn 0.22s ease both; }
+.tab-content.from-start { animation: tabInFromStart 0.26s cubic-bezier(0.22,0.9,0.3,1) both; }
+.tab-content.from-end   { animation: tabInFromEnd   0.26s cubic-bezier(0.22,0.9,0.3,1) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .tab-content, .tab-content.from-start, .tab-content.from-end,
+  .bar-seg, .progress-fill, .reminder-banner, .modal-card-anim {
+    animation: none !important;
+  }
+  * { transition: none !important; }
+}
+
+/* ── History rows ── */
+.hist-row { transition: background .15s, padding-inline .15s; border-radius: 10px; }
+.hist-row:last-child { border-bottom: none !important; }
+.hist-row:active { background: rgba(167,139,250,0.08); }
 
 /* ── Cards ── */
 .km-card {

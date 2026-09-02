@@ -1,56 +1,59 @@
-const SW_CACHE = "km-sw-state-v1";
+const SW_CACHE  = "km-sw-state-v2";
 const STATE_URL = "/km-sw-state.json";
 
-const MONTH_HE = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני",
-                  "יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
+// Nag on these days of the month, then stop. Entering the reading late means
+// the first days of the new month get charged to the month that just ended,
+// so earlier is more accurate — but three prompts is enough.
+const NAG_DAYS = [1, 3, 6];
 
-// App sends its state here so SW can read it even when app is closed
+const readState  = async () => {
+  const c = await caches.open(SW_CACHE);
+  const r = await c.match(STATE_URL);
+  return r ? r.json() : null;
+};
+const writeState = async (s) => {
+  const c = await caches.open(SW_CACHE);
+  await c.put(STATE_URL, new Response(JSON.stringify(s), {
+    headers: { "Content-Type": "application/json" }
+  }));
+};
+
+// The app owns the "what" (which month is missing); the SW owns the "when".
+// It merges so the app can't clobber the SW's own record of what it has sent.
 self.addEventListener("message", (event) => {
-  if (event.data?.type === "KM_STATE") {
-    caches.open(SW_CACHE).then(cache => {
-      cache.put(STATE_URL, new Response(JSON.stringify(event.data.payload), {
-        headers: { "Content-Type": "application/json" }
-      }));
-    });
-  }
+  if (event.data?.type !== "KM_STATE") return;
+  event.waitUntil((async () => {
+    const prev = (await readState()) || {};
+    await writeState({ ...prev, ...event.data.payload });
+  })());
 });
 
-// Periodic Background Sync — fires ~once a day on Chrome Android (installed PWA)
+// Periodic Background Sync — Chrome on Android, installed PWA only.
 self.addEventListener("periodicsync", (event) => {
-  if (event.tag === "km-monthly-reminder") {
-    event.waitUntil(checkAndNotify());
-  }
+  if (event.tag === "km-monthly-reminder") event.waitUntil(checkAndNotify());
 });
 
-// Also check on SW activation (fallback for non-periodic-sync browsers)
-self.addEventListener("activate", (event) => {
-  event.waitUntil(clients.claim());
-});
+self.addEventListener("activate", (event) => event.waitUntil(clients.claim()));
 
 async function checkAndNotify() {
   try {
-    const cache  = await caches.open(SW_CACHE);
-    const resp   = await cache.match(STATE_URL);
-    if (!resp) return;
+    const state = await readState();
+    if (!state?.pendingMonth) return;               // nothing to enter
 
-    const state  = await resp.json();
-    const now    = new Date();
-    const curKey = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
+    const now = new Date();
+    if (!NAG_DAYS.includes(now.getDate())) return;  // not a nag day
 
-    const alreadyEntered   = state.lastEnteredMonth  === curKey;
-    const dismissedThisMonth = state.reminderDismissed === curKey;
-    const lastNotified     = state.lastNotifiedMonth  === curKey;
+    if (state.reminderDismissed === state.pendingMonth) return;
 
-    if (alreadyEntered || dismissedThisMonth || lastNotified) return;
+    // One notification per (month, nag day) — survives the app resyncing.
+    const stamp = `${state.pendingMonth}#${now.getDate()}`;
+    if (state.lastNotifiedStamp === stamp) return;
+    await writeState({ ...state, lastNotifiedStamp: stamp });
 
-    // Update lastNotified so we don't spam
-    await cache.put(STATE_URL, new Response(JSON.stringify({...state, lastNotifiedMonth: curKey}), {
-      headers: { "Content-Type": "application/json" }
-    }));
-
-    await self.registration.showNotification('מד ק"מ 🚗', {
-      body: `עדיין לא עדכנת את מד הק"מ לחודש ${MONTH_HE[now.getMonth()]} — כדאי לעדכן לפני שתשכח!`,
-      icon: self.registration.scope + "icon.svg",
+    const name = state.pendingMonthName || "החודש שהסתיים";
+    await self.registration.showNotification("8-400 🚗", {
+      body: `הזן את מד הק״מ של ${name} — ככל שמעדכנים מוקדם יותר, החישוב מדויק יותר.`,
+      icon:  self.registration.scope + "icon.svg",
       badge: self.registration.scope + "icon.svg",
       tag: "km-reminder",
       renotify: false,
@@ -62,20 +65,19 @@ async function checkAndNotify() {
         { action: "dismiss", title: "אחר כך"    }
       ]
     });
-  } catch(e) {}
+  } catch (e) {}
 }
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   if (event.action === "dismiss") return;
-
   event.waitUntil(
     clients.matchAll({ type: "window", includeUncontrolled: true }).then(list => {
       if (list.length > 0) {
         list[0].focus();
         list[0].postMessage({ type: "OPEN_UPDATE_TAB" });
       } else {
-        clients.openWindow("/");
+        clients.openWindow(self.registration.scope);
       }
     })
   );

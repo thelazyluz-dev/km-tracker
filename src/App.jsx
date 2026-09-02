@@ -195,6 +195,11 @@ export default function App() {
   const [sf, setSf] = useState({yearStart:`${today.getFullYear()}-01-01`,startOdo:"",commute:"62",yearlyBudget:String(DEFAULT_BUDGET)});
 
   const [uf, setUf] = useState({year:today.getFullYear(),month:today.getMonth(),odometer:"",dayOverrides:{}});
+  const TAB_ORDER=["dashboard","update","history"];
+  const [tabDir,setTabDir]=useState(0);
+  const goTab=(k)=>{ setTabDir(TAB_ORDER.indexOf(k)-TAB_ORDER.indexOf(tab)); setTab(k); };
+  const tabAnim=tabDir===0?"tab-content":`tab-content ${tabDir>0?"from-start":"from-end"}`;
+
   const [showCalendar, setShowCalendar] = useState(false);
   const [showDetails, setShowDetails]   = useState(false);
   // Synchronous mirror of `uf` — lets rapid stepper taps read the freshest value
@@ -228,7 +233,7 @@ export default function App() {
     navigator.serviceWorker.register(import.meta.env.BASE_URL + "sw.js").then(reg=>{
       // Listen for notification-click → open update tab
       navigator.serviceWorker.addEventListener("message",(e)=>{
-        if(e.data?.type==="OPEN_UPDATE_TAB") setTab("update");
+        if(e.data?.type==="OPEN_UPDATE_TAB") goTab("update");
       });
       // Register Periodic Background Sync if supported (~Chrome Android)
       if("periodicSync" in reg){
@@ -242,31 +247,47 @@ export default function App() {
     }).catch(()=>{});
   },[]);
 
-  function syncStateToSW(d, dismissed){
+  // The month a reminder should be about: the one that just ended, if it has
+  // no reading yet. Falls back to the current month once we're past mid-month.
+  const pendingMonth = useMemo(()=>{
+    if(!appData?.setup) return null;
+    const inYear=(k)=>getYearMonths(appData.setup.yearStart).some(m=>m.key===k);
+    const pm=new Date(today.getFullYear(),today.getMonth()-1,1);
+    const pk=mKey(pm.getFullYear(),pm.getMonth());
+    if(inYear(pk)&&!appData.months?.[pk]?.odometer)
+      return {key:pk,name:MONTH_HE[pm.getMonth()],year:pm.getFullYear(),month:pm.getMonth()};
+    if(today.getDate()>=15&&inYear(todayKey)&&!appData.months?.[todayKey]?.odometer)
+      return {key:todayKey,name:MONTH_HE[today.getMonth()],year:today.getFullYear(),month:today.getMonth()};
+    return null;
+  },[appData,today,todayKey]);
+
+  function syncStateToSW(d, dismissed, pending){
     if(!("serviceWorker" in navigator)||!navigator.serviceWorker.controller) return;
-    const months=d?.setup?getYearMonths(d.setup.yearStart):[];
-    const lastEntered=months.slice().reverse().find(({key})=>d?.months?.[key]?.odometer)?.key||null;
     navigator.serviceWorker.controller.postMessage({
       type:"KM_STATE",
       payload:{
-        lastEnteredMonth: lastEntered,
+        pendingMonth:     pending?.key  ?? null,
+        pendingMonthName: pending?.name ?? null,
         reminderDismissed: dismissed ?? localStorage.getItem(REMINDER_KEY) ?? "",
-        lastNotifiedMonth: null,
       }
     });
   }
+
+  // Keep the worker's picture current whenever the pending month changes
+  useEffect(()=>{ syncStateToSW(appData,null,pendingMonth); },[pendingMonth]);
 
   function persist(d){
     setAppData({...d});
     saveData({...d});
     // Give SW time to activate on first load
-    setTimeout(()=>syncStateToSW(d, null), 500);
+    setTimeout(()=>syncStateToSW(d, null, pendingMonth), 500);
   }
 
   function dismissReminder(){
-    try{ localStorage.setItem(REMINDER_KEY, todayKey); }catch{}
-    setReminderDismissed(todayKey);
-    syncStateToSW(appData, todayKey);
+    const k=pendingMonth?.key||todayKey;
+    try{ localStorage.setItem(REMINDER_KEY, k); }catch{}
+    setReminderDismissed(k);
+    syncStateToSW(appData, pendingMonth?.key||todayKey, pendingMonth);
   }
 
   // Async-safe persist — always builds on the freshest state
@@ -275,7 +296,7 @@ export default function App() {
       const next=updater(prev);
       if(!next) return prev;
       saveData(next);
-      setTimeout(()=>syncStateToSW(next,null),300);
+      setTimeout(()=>syncStateToSW(next,null,pendingMonth),300);
       return next;
     });
   }
@@ -616,14 +637,14 @@ export default function App() {
     };
     persist(newData);
     showToast(`${MONTH_HE[uf.month]} נשמר ✓`);
-    setTab("dashboard");
+    goTab("dashboard");
   }
 
   function openUpdate(year,month){
     const mk=mKey(year,month);
     const ex=migrateEntry(appData?.months?.[mk]);
     setUf({year,month,odometer:ex?.odometer?.toString()||"",dayOverrides:ex?.dayOverrides||{}});
-    setTab("update");
+    goTab("update");
   }
 
   function navigateMonth(dir){
@@ -645,7 +666,7 @@ export default function App() {
     localStorage.removeItem(KEY);
     setAppData(null);
     setScreen("setup");
-    setTab("dashboard");
+    goTab("dashboard");
   }
 
   function exportCSV(){
@@ -748,13 +769,12 @@ export default function App() {
                   border:`1px solid ${isToday?cl.accent:isFuture?cl.border:cfg.border}`,
                   color:isFuture?cl.muted:cfg.color,cursor:"pointer",height:"46px",overflow:"hidden",
                   display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:"2px"}}>
-                <span style={{fontSize:"13.5px",fontWeight:isToday?800:700,lineHeight:1}}>{d}</span>
+                <span style={{fontSize:"14px",fontWeight:isToday?800:700,lineHeight:1}}>{d}</span>
+                {/* Holiday names were unreadable at 7px — the colour and 🟡 carry
+                    the meaning, and the day sheet spells the name out. */}
                 {isFuture
                   ? <span style={{fontSize:"9px",lineHeight:1,opacity:0.5}}>·</span>
-                  : holiday
-                    ? <span style={{fontSize:"7px",fontWeight:700,lineHeight:"1.1",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",paddingInline:"2px"}}>{holiday}</span>
-                    : <span style={{fontSize:"10.5px",lineHeight:1}}>{cfg.icon}</span>
-                }
+                  : <span style={{fontSize:"11px",lineHeight:1}}>{cfg.icon}</span>}
               </div>
             );
           })}
@@ -850,12 +870,12 @@ export default function App() {
 
         <div style={S.tabs}>
           {[["dashboard","📊 סטטוס"],["update","✏️ עדכון"],["history","📋 היסטוריה"]].map(([k,l])=>(
-            <button key={k} className="tab-btn" style={S.tab(tab===k)} onClick={()=>setTab(k)}>{l}</button>
+            <button key={k} className="tab-btn" style={S.tab(tab===k)} onClick={()=>goTab(k)}>{l}</button>
           ))}
         </div>
 
         {tab==="dashboard" && annual && (
-          <div className="tab-content">
+          <div className={tabAnim}>
             {/* Exactly one action card — whichever matters most right now */}
             {(()=>{
               if(annual.yearEnded) return(
@@ -868,12 +888,15 @@ export default function App() {
                   <button className="btn-main" style={{...S.btn,marginTop:0}} onClick={startNewYear}>התחל שנה חדשה ←</button>
                 </div>
               );
-              if(!annual.byMonth[todayKey] && reminderDismissed!==todayKey) return(
+              if(pendingMonth && reminderDismissed!==pendingMonth.key) return(
                 <div className="reminder-banner km-card" style={{...S.card,background:cl.yellowBg,border:`1px solid ${cl.yellow}44`}}>
-                  <div style={{fontWeight:700,fontSize:"15px",color:cl.yellow,marginBottom:"6px"}}>🔔 עוד לא עדכנת את {MONTH_HE[today.getMonth()]}</div>
-                  <div style={{display:"flex",gap:"8px",marginTop:"12px"}}>
+                  <div style={{fontWeight:700,fontSize:"15px",color:cl.yellow,marginBottom:"5px"}}>🔔 עוד לא עדכנת את {pendingMonth.name}</div>
+                  <div style={{fontSize:"12.5px",color:cl.muted2,lineHeight:"1.6"}}>
+                    ככל שמעדכנים קרוב יותר לסוף החודש, החישוב מדויק יותר.
+                  </div>
+                  <div style={{display:"flex",gap:"8px",marginTop:"13px"}}>
                     <button className="btn-main" style={{...S.btn,marginTop:0,padding:"11px 20px",fontSize:"13px",width:"auto",background:"linear-gradient(135deg,#92400e,#fbbf24)"}}
-                      onClick={()=>{setTab("update");openUpdate(today.getFullYear(),today.getMonth());}}>עדכן עכשיו ←</button>
+                      onClick={()=>openUpdate(pendingMonth.year,pendingMonth.month)}>עדכן עכשיו ←</button>
                     <button style={S.btnGhost} className="btn-ghost" onClick={dismissReminder}>אחר כך</button>
                   </div>
                 </div>
@@ -895,7 +918,25 @@ export default function App() {
               return null;
             })()}
 
+            {/* A new user has nothing to judge yet — say what to do instead of
+                showing a 0% ring with no explanation. */}
+            {annual.recordedCount===0 && (
+              <div className="km-card" style={{...S.card,textAlign:"center",padding:"32px 24px",
+                background:`linear-gradient(160deg,${cl.accentBg} 0%,transparent 75%)`,
+                border:`1px solid ${cl.accent}33`}}>
+                <div style={{fontSize:"36px",marginBottom:"12px"}}>👋</div>
+                <div style={{fontSize:"18px",fontWeight:800,color:cl.text,marginBottom:"8px"}}>הכל מוכן</div>
+                <div style={{fontSize:"13.5px",color:cl.muted2,lineHeight:"1.7",marginBottom:"18px"}}>
+                  יש לך <strong style={{color:cl.text}}>{annual.budget.toLocaleString()}</strong> ק״מ פרטיים לשנה.
+                  בסוף כל חודש הזן את קריאת המד — השאר מחושב לבד.
+                </div>
+                <button className="btn-main" style={{...S.btn,marginTop:0}}
+                  onClick={()=>openUpdate(uf.year,uf.month)}>הזן קריאה ראשונה ←</button>
+              </div>
+            )}
+
             {/* The one answer: am I OK? */}
+            {annual.recordedCount>0 && (
             <div className="km-card" style={{...S.card,textAlign:"center",paddingTop:"28px",paddingBottom:"26px",
               background:`linear-gradient(160deg,${verdict.tint} 0%,transparent 75%)`,border:`1px solid ${verdict.color}33`}}>
               <div style={{position:"relative",width:"120px",margin:"0 auto"}}>
@@ -908,6 +949,7 @@ export default function App() {
               <div style={{fontSize:"14.5px",color:cl.muted2,marginTop:"7px",lineHeight:"1.65",
                 maxWidth:"290px",marginInline:"auto"}}>{verdict.line}</div>
             </div>
+            )}
 
             {/* This month, in the terms people actually think in */}
             <div className="km-card" style={S.card}>
@@ -973,7 +1015,7 @@ export default function App() {
         )}
 
         {tab==="update" && (
-          <div className="tab-content km-card" style={S.card}>
+          <div className={tabAnim+" km-card"} style={S.card}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"18px"}}>
               <button style={{...S.btnGhost,padding:"10px 16px",fontSize:"15px"}} className="btn-ghost" onClick={()=>navigateMonth(-1)}>→</button>
               <div style={{textAlign:"center"}}>
@@ -1057,37 +1099,55 @@ export default function App() {
         )}
 
         {tab==="history" && (
-          <div className="tab-content">
+          <div className={tabAnim}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"16px"}}>
               <div style={S.sectionTitle}>היסטוריית נסיעות</div>
               <button style={S.btnGhost} className="btn-ghost" onClick={exportCSV}>⬇ CSV</button>
             </div>
-            {annual.months.map(m=>{
-              const s=annual.byMonth[m.key];
-              if(!s) return null;
-              const isOver=annual.allowance>0&&s.personal>annual.allowance*1.2;
-              const barW=annual.maxPersonal>0?Math.round((s.personal/annual.maxPersonal)*100):0;
-              return(
-                <div key={m.key} className="km-card" style={{...S.card,marginBottom:"10px",cursor:"pointer"}} onClick={()=>openUpdate(m.year,m.month)}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"10px"}}>
-                    <div>
-                      <div style={{fontWeight:700,fontSize:"15px",color:cl.text}}>{MONTH_HE[m.month]}</div>
-                      <div style={{fontSize:"11px",color:cl.muted,marginTop:"2px"}}>{m.year} · {s.workDays} ימי עבודה</div>
-                    </div>
-                    <span style={S.badge(isOver?cl.red:cl.green,isOver?cl.redBg:cl.greenBg)}>
-                      {s.personal.toLocaleString()} ק"מ פרטי
-                    </span>
-                  </div>
-                  <div style={{background:isDark?"rgba(255,255,255,0.07)":"rgba(0,0,0,0.07)",borderRadius:"4px",height:"4px",overflow:"hidden"}}>
-                    <div style={{width:`${barW}%`,height:"100%",borderRadius:"4px",background:isOver?"linear-gradient(90deg,#f87171,#fca5a5)":"linear-gradient(90deg,#7c3aed,#34d399)",transition:"width 0.6s ease"}}/>
-                  </div>
-                  <div style={{fontSize:"12px",color:cl.muted,marginTop:"8px",display:"flex",gap:"16px"}}>
-                    <span>עבודה: <span style={{color:cl.muted2}}>{s.workKm}</span></span>
-                    <span>סה"כ: <span style={{color:cl.muted2}}>{s.totalKm}</span></span>
-                  </div>
+            {annual.recordedCount===0 ? (
+              <div style={{...S.card,textAlign:"center",padding:"40px 24px"}}>
+                <div style={{fontSize:"34px",marginBottom:"12px",opacity:0.7}}>📋</div>
+                <div style={{fontSize:"15px",fontWeight:700,color:cl.text,marginBottom:"6px"}}>עדיין אין היסטוריה</div>
+                <div style={{fontSize:"13px",color:cl.muted,lineHeight:"1.65"}}>
+                  אחרי שתזין את קריאת המד הראשונה, כל חודש יופיע כאן.
                 </div>
-              );
-            })}
+              </div>
+            ) : (
+              <div style={{...S.card,padding:"6px 20px"}}>
+                {annual.months.map(m=>{
+                  const s=annual.byMonth[m.key];
+                  if(!s) return null;
+                  const isOver=annual.allowance>0&&s.personal>annual.allowance*1.2;
+                  const barW=Math.round((s.personal/Math.max(1,annual.maxPersonal))*100);
+                  return(
+                    <div key={m.key} className="hist-row" onClick={()=>openUpdate(m.year,m.month)}
+                      style={{padding:"15px 0",borderBottom:`1px solid ${cl.border}`,cursor:"pointer"}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:"9px"}}>
+                        <div style={{display:"flex",alignItems:"baseline",gap:"8px"}}>
+                          <span style={{fontWeight:700,fontSize:"15px",color:cl.text}}>{MONTH_HE[m.month]}</span>
+                          <span style={{fontSize:"11.5px",color:cl.muted}}>{s.workDays} ימי עבודה</span>
+                        </div>
+                        <div style={{display:"flex",alignItems:"baseline",gap:"5px"}}>
+                          <span className="stat-num" style={{fontSize:"19px",fontWeight:800,
+                            color:isOver?cl.red:cl.text}}>{s.personal.toLocaleString()}</span>
+                          <span style={{fontSize:"11.5px",color:cl.muted}}>פרטי</span>
+                        </div>
+                      </div>
+                      <div style={{background:isDark?"rgba(255,255,255,0.07)":"rgba(0,0,0,0.07)",
+                        borderRadius:"3px",height:"3px",overflow:"hidden"}}>
+                        <div style={{width:`${barW}%`,height:"100%",borderRadius:"3px",
+                          background:isOver?"linear-gradient(90deg,#f87171,#fca5a5)":"linear-gradient(90deg,#7c3aed,#34d399)",
+                          transition:"width .6s ease"}}/>
+                      </div>
+                      <div style={{fontSize:"11.5px",color:cl.muted,marginTop:"8px",display:"flex",gap:"14px"}}>
+                        <span>עבודה <span style={{color:cl.muted2,fontWeight:600}}>{s.workKm.toLocaleString()}</span></span>
+                        <span>סה״כ <span style={{color:cl.muted2,fontWeight:600}}>{s.totalKm.toLocaleString()}</span></span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1113,7 +1173,7 @@ export default function App() {
             {"Notification" in window && Notification.permission!=="granted" && (
               <button className="btn-main" style={{...S.btn,marginTop:"8px",background:"linear-gradient(135deg,#92400e,#fb923c)"}}
                 onClick={()=>Notification.requestPermission().then(p=>{
-                  if(p==="granted"){showToast("התראות מופעלות ✓");syncStateToSW(appData,null);}
+                  if(p==="granted"){showToast("התראות מופעלות ✓");syncStateToSW(appData,null,pendingMonth);}
                   else showToast("לא ניתנה הרשאה",cl.red);
                 })}>
                 🔔 הפעל התראות

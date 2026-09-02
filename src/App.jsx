@@ -33,9 +33,12 @@ function getDefaultState(iso,y,m,d){
 }
 function getEffectiveState(iso,y,m,d,ov){ return ov?.[iso]??getDefaultState(iso,y,m,d); }
 
-function countWorkdays(y,m,ov={}){
+// `upTo` caps counting at a day of the month — the month in progress has no
+// commutes yet for days that haven't happened.
+function countWorkdays(y,m,ov={},upTo){
+  const last=Math.min(upTo??daysInMonth(y,m),daysInMonth(y,m));
   let n=0;
-  for(let d=1;d<=daysInMonth(y,m);d++){
+  for(let d=1;d<=last;d++){
     const iso=toISO(y,m,d);
     if(getEffectiveState(iso,y,m,d,ov)==="work") n++;
   }
@@ -159,7 +162,12 @@ function RingProgress({pct,color,trackColor}){
 const REMINDER_KEY = "km_reminder_dismissed";
 
 export default function App() {
-  const today    = new Date();
+  // Stable for the session — a fresh `new Date()` each render would make every
+  // memo that depends on it recompute on every keystroke.
+  const today = useMemo(()=>{
+    const n=new Date();
+    return new Date(n.getFullYear(),n.getMonth(),n.getDate());
+  },[]);
   const todayISO = toISO(today.getFullYear(),today.getMonth(),today.getDate());
   const todayKey = mKey(today.getFullYear(),today.getMonth());
 
@@ -378,9 +386,14 @@ export default function App() {
     reader.onload=e=>{
       try{
         const d=JSON.parse(e.target.result);
-        if(!d?.setup?.yearStart) throw new Error("invalid");
+        const s=d?.setup;
+        const ok = s && /^\d{4}-\d{2}-\d{2}$/.test(s.yearStart||"")
+          && Number.isFinite(Number(s.startOdometer)) && Number(s.commute)>0
+          && (d.months==null || (typeof d.months==="object" && !Array.isArray(d.months)));
+        if(!ok) throw new Error("invalid");
         if(!window.confirm("לשחזר את הגיבוי? כל הנתונים הנוכחיים יוחלפו.")) return;
-        persist(d); setShowSettings(false); showToast("הנתונים שוחזרו ✓");
+        persist({...d,months:d.months||{}});
+        setShowSettings(false); showToast("הנתונים שוחזרו ✓");
       }catch{ showToast("קובץ גיבוי לא תקין",cl.red); }
     };
     reader.readAsText(file);
@@ -423,15 +436,22 @@ export default function App() {
 
   const getPrevOdo = useCallback((year,month)=>getPrevInfo(year,month).odo,[getPrevInfo]);
 
+  // A month still in progress is counted only up to today, so a mid-month
+  // reading isn't charged for commutes that haven't happened yet. This must
+  // match what the update screen previews, or the number changes on save.
+  const capFor = useCallback((year,month)=>
+    mKey(year,month)===todayKey ? today.getDate() : undefined
+  ,[todayKey,today]);
+
   // Workdays for a month, plus those of any skipped months folded into it
   const workDaysFor = useCallback((year,month,overrides,gapMonths)=>{
-    let n=countWorkdays(year,month,overrides||{});
+    let n=countWorkdays(year,month,overrides||{},capFor(year,month));
     for(const g of (gapMonths||[])){
       const ge=migrateEntry(appData?.months?.[g.key]);
-      n+=countWorkdays(g.year,g.month,ge?.dayOverrides||{});
+      n+=countWorkdays(g.year,g.month,ge?.dayOverrides||{},capFor(g.year,g.month));
     }
     return n;
-  },[appData]);
+  },[appData,capFor]);
 
   const calcMonth = useCallback((year,month)=>{
     const mk=mKey(year,month);
@@ -509,12 +529,12 @@ export default function App() {
     let workDays=ufWorkDays;
     for(const g of gapMonths){
       const ge=migrateEntry(appData?.months?.[g.key]);
-      workDays+=countWorkdays(g.year,g.month,ge?.dayOverrides||{});
+      workDays+=countWorkdays(g.year,g.month,ge?.dayOverrides||{},capFor(g.year,g.month));
     }
     const workKm=workDays*(appData.setup.commute||62);
     const personal=Math.max(0,totalKm-workKm);
     return {totalKm,workDays,workKm,personal,prevOdo,gapMonths};
-  },[uf.odometer,uf.year,uf.month,appData,getPrevInfo,ufWorkDays]);
+  },[uf.odometer,uf.year,uf.month,appData,getPrevInfo,ufWorkDays,capFor]);
 
 
   // The single "am I OK?" answer the dashboard leads with
@@ -548,18 +568,20 @@ export default function App() {
   }
 
   function handleSetup(){
-    if(!sf.startOdo||!sf.commute||!sf.yearStart) return;
-    const d={setup:{yearStart:sf.yearStart,startOdometer:Number(sf.startOdo),commute:Number(sf.commute),yearlyBudget:Number(sf.yearlyBudget)||DEFAULT_BUDGET},months:{}};
+    const odo=Number(sf.startOdo), c=Number(sf.commute), b=Number(sf.yearlyBudget)||DEFAULT_BUDGET;
+    if(!sf.yearStart||!(odo>=0)||!(c>0)){ showToast("בדוק את הערכים שהזנת",cl.red); return; }
+    const d={setup:{yearStart:sf.yearStart,startOdometer:odo,commute:c,yearlyBudget:b},months:{}};
     persist(d);
     setScreen("main");
     showToast("ההגדרות נשמרו ✓");
   }
 
   function handleSaveSettings(){
-    if(!settingsForm.commute||!settingsForm.yearlyBudget) return;
+    const c=Number(settingsForm.commute), b=Number(settingsForm.yearlyBudget);
+    if(!(c>0)||!(b>0)){ showToast("הזן מספרים חיוביים",cl.red); return; }
     const newData={
       ...appData,
-      setup:{...appData.setup,commute:Number(settingsForm.commute),yearlyBudget:Number(settingsForm.yearlyBudget)||DEFAULT_BUDGET}
+      setup:{...appData.setup,commute:c,yearlyBudget:b}
     };
     persist(newData);
     setShowSettings(false);
@@ -608,11 +630,15 @@ export default function App() {
     setUf(prev=>{
       const d=new Date(prev.year,prev.month+dir,1);
       const y=d.getFullYear(),m=d.getMonth();
-      const mk=mKey(y,m);
-      const ex=migrateEntry(appData?.months?.[mk]);
+      // A month that hasn't happened has nothing to record, and letting the
+      // stepper loose there writes overrides the counter can never show.
+      if(mKey(y,m)>todayKey) return prev;
+      const ex=migrateEntry(appData?.months?.[mKey(y,m)]);
       return {year:y,month:m,odometer:ex?.odometer?.toString()||"",dayOverrides:ex?.dayOverrides||{}};
     });
   }
+
+  const atCurrentMonth = mKey(uf.year,uf.month)>=todayKey;
 
   function doReset(){
     if(!window.confirm("לאפס את כל הנתונים ולהתחיל מחדש?")) return;
@@ -940,12 +966,14 @@ export default function App() {
         {tab==="update" && (
           <div className="tab-content km-card" style={S.card}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"18px"}}>
-              <button style={S.btnGhost} className="btn-ghost" onClick={()=>navigateMonth(-1)}>→</button>
+              <button style={{...S.btnGhost,padding:"10px 16px",fontSize:"15px"}} className="btn-ghost" onClick={()=>navigateMonth(-1)}>→</button>
               <div style={{textAlign:"center"}}>
-                <div style={{fontSize:"11px",fontWeight:700,color:cl.accent,}}>{uf.year}</div>
-                <div style={{fontSize:"18px",fontWeight:800,color:cl.text,marginTop:"2px"}}>{MONTH_HE[uf.month]}</div>
+                <div style={{fontSize:"12px",fontWeight:700,color:cl.muted}}>{uf.year}</div>
+                <div style={{fontSize:"19px",fontWeight:800,color:cl.text,marginTop:"1px"}}>{MONTH_HE[uf.month]}</div>
               </div>
-              <button style={S.btnGhost} className="btn-ghost" onClick={()=>navigateMonth(1)}>←</button>
+              <button style={{...S.btnGhost,padding:"10px 16px",fontSize:"15px",
+                opacity:atCurrentMonth?0.3:1,cursor:atCurrentMonth?"default":"pointer"}}
+                className="btn-ghost" disabled={atCurrentMonth} onClick={()=>navigateMonth(1)}>←</button>
             </div>
             {livePreview?.gapMonths?.length>0 && (
               <div style={{padding:"12px 14px",borderRadius:"12px",background:cl.yellowBg,

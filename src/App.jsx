@@ -351,14 +351,19 @@ export default function App() {
 
   // ── Weekly check-in: "how many days did you drive this week?" ─────────
   function applyWeeklyCheckin(count){
+    if(!appData?.setup) return;
     const sunday=weekStartOf(today);
     const days=[];
     for(let i=0;i<=today.getDay();i++){
       const dt=new Date(sunday.getFullYear(),sunday.getMonth(),sunday.getDate()+i);
-      const y=dt.getFullYear(),m=dt.getMonth(),d=dt.getDate();
-      days.push({y,m,d,iso:toISO(y,m,d),mk:mKey(y,m)});
+      const y=dt.getFullYear(),m=dt.getMonth(),d=dt.getDate(),k=mKey(y,m);
+      // A week can start in the previous month. That month may already have a
+      // saved reading — rewriting its days would silently change a figure the
+      // user has already closed out, so those days are left alone.
+      if(appData.months?.[k]?.odometer) continue;
+      days.push({y,m,d,iso:toISO(y,m,d),mk:k});
     }
-    if(!appData?.setup) return;
+    if(!days.length){ skipWeeklyCheckin(); showToast("השבוע כבר מכוסה בחודש שנסגר"); return; }
     const months={...(appData.months||{})};
     for(const x of days) months[x.mk]=migrateEntry(months[x.mk])||{dayOverrides:{}};
     // clear this week's overrides so a re-answer replaces the previous one
@@ -888,7 +893,9 @@ export default function App() {
                   <button className="btn-main" style={{...S.btn,marginTop:0}} onClick={startNewYear}>התחל שנה חדשה ←</button>
                 </div>
               );
-              if(pendingMonth && reminderDismissed!==pendingMonth.key) return(
+              // A user with nothing recorded gets the welcome card below —
+              // telling them they "forgot" a month would contradict it.
+              if(annual.recordedCount>0 && pendingMonth && reminderDismissed!==pendingMonth.key) return(
                 <div className="reminder-banner km-card" style={{...S.card,background:cl.yellowBg,border:`1px solid ${cl.yellow}44`}}>
                   <div style={{fontWeight:700,fontSize:"15px",color:cl.yellow,marginBottom:"5px"}}>🔔 עוד לא עדכנת את {pendingMonth.name}</div>
                   <div style={{fontSize:"12.5px",color:cl.muted2,lineHeight:"1.6"}}>
@@ -1213,23 +1220,136 @@ export default function App() {
         </div>
       )}
 
-      {showAbout && (
-        <div className="modal-overlay-anim" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",backdropFilter:"blur(8px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:100,padding:"20px",direction:"rtl"}}>
-          <div className="modal-card-anim" style={{...S.card,width:"100%",maxWidth:"360px",marginBottom:0,border:"1px solid rgba(167,139,250,0.2)"}}>
-            <div style={{textAlign:"center",paddingBottom:"20px",marginBottom:"20px",borderBottom:`1px solid ${cl.border}`}}>
-              <div style={{fontSize:"40px",marginBottom:"8px"}}>🚗</div>
-              <div style={{fontSize:"24px",fontWeight:800,color:cl.text,letterSpacing:"-0.5px"}}>8-400</div>
-              <div style={{fontSize:"12px",color:cl.accent,marginTop:"4px",fontWeight:600}}>ניהול חכם של ק״מ שנתי</div>
+      {showAbout && (()=>{
+        const Sec=({title,children})=>(
+          <div style={{...S.card,marginBottom:"12px"}}>
+            <div style={S.sectionTitle}>{title}</div>
+            {children}
+          </div>
+        );
+        const Step=({n,title,children})=>(
+          <div style={{display:"flex",gap:"12px",marginBottom:"16px"}}>
+            <div style={{flexShrink:0,width:"25px",height:"25px",borderRadius:"50%",background:cl.accentBg,
+              color:cl.accent,fontWeight:800,fontSize:"13px",display:"flex",alignItems:"center",
+              justifyContent:"center",marginTop:"1px"}}>{n}</div>
+            <div style={{flex:1}}>
+              <div style={{fontSize:"14px",fontWeight:700,color:cl.text,marginBottom:"3px"}}>{title}</div>
+              <div style={{fontSize:"13px",color:cl.muted2,lineHeight:"1.65"}}>{children}</div>
             </div>
-            <div style={{fontSize:"13px",color:cl.muted2,lineHeight:"1.7",marginBottom:"20px"}}>
-              אפליקציה למעקב ק״מ פרטי לאורך השנה — חישוב אוטומטי של ק״מ עבודה מול פרטי, ניהול תקציב שנתי ולוח שנה חכם לסימון ימי עבודה.
+          </div>
+        );
+        const Item=({icon,label,children})=>(
+          <div style={{display:"flex",gap:"11px",padding:"11px 0",borderBottom:`1px solid ${cl.border}`}}>
+            <span style={{fontSize:"17px",lineHeight:1.3,flexShrink:0,width:"22px",textAlign:"center"}}>{icon}</span>
+            <div style={{flex:1}}>
+              <div style={{fontSize:"13.5px",fontWeight:700,color:cl.text}}>{label}</div>
+              <div style={{fontSize:"12.5px",color:cl.muted,lineHeight:"1.6",marginTop:"2px"}}>{children}</div>
             </div>
-            <div style={{textAlign:"center",fontSize:"11px",color:cl.muted,marginBottom:"16px"}}>made by illouzman</div>
-            <button style={{...S.btnGhost,width:"100%",display:"flex",justifyContent:"center",padding:"12px"}}
+          </div>
+        );
+        const commute=appData?.setup?.commute||62;
+        const budget=(appData?.setup?.yearlyBudget||DEFAULT_BUDGET).toLocaleString();
+        return(
+        <div className="modal-overlay-anim" style={{position:"fixed",inset:0,background:cl.bg,zIndex:100,
+          overflowY:"auto",direction:"rtl",padding:"20px 16px 40px",display:"flex",justifyContent:"center"}}>
+          <div style={{width:"100%",maxWidth:"430px"}}>
+            <div style={{display:"flex",alignItems:"center",gap:"12px",paddingBottom:"18px",marginBottom:"18px",
+              borderBottom:`1px solid ${cl.border}`}}>
+              <button style={{...S.btnGhost,padding:"9px 14px",fontSize:"16px"}} className="btn-ghost"
+                onClick={()=>setShowAbout(false)}>→</button>
+              <div style={{fontSize:"20px",fontWeight:800,color:cl.text}}>איך זה עובד</div>
+            </div>
+
+            <Sec title="הרעיון בשורה אחת">
+              <div style={{fontSize:"14px",color:cl.text,lineHeight:"1.75"}}>
+                האפליקציה מניחה שנסעת לעבודה <strong>כל יום א׳–ה׳</strong>, ושבשישי־שבת וחגים לא.
+                אתה מסמן <strong style={{color:cl.accent}}>רק את החריגים</strong> — הימים שלא הגעת.
+              </div>
+              <div style={{marginTop:"14px",padding:"13px 15px",background:cl.surface2,borderRadius:"12px",
+                fontSize:"13px",color:cl.muted2,lineHeight:"1.7"}}>
+                <div style={{fontWeight:700,color:cl.text,marginBottom:"5px"}}>החישוב</div>
+                ק״מ פרטי = כל מה שנסעת, פחות ימי העבודה × {commute} ק״מ.
+                <br/>מה שנשאר נגרע מתקציב של {budget} ק״מ לשנה.
+              </div>
+            </Sec>
+
+            <Sec title="מה לעשות ומתי">
+              <Step n="1" title="בתחילת כל חודש">
+                פתח את <strong>עדכון</strong> והזן את קריאת מד הק״מ. זו הפעולה היחידה שחייבים לעשות.
+                <br/><span style={{color:cl.yellow}}>ככל שמעדכנים קרוב יותר ל-1 בחודש, החישוב מדויק יותר.</span>
+              </Step>
+              <Step n="2" title="אם לא נסעת לעבודה יום מסוים">
+                הורד אותו במונה <strong>«כמה ימים נסעת לעבודה»</strong> עם כפתור −.
+                לא צריך לזכור איזה יום בדיוק — רק כמה.
+              </Step>
+              <Step n="3" title="פעם בשבוע (רשות)">
+                בסוף השבוע תופיע שאלה אחת: כמה ימים נסעת השבוע. הקשה אחת, וזהו.
+              </Step>
+              <div style={{padding:"12px 14px",background:cl.greenBg,borderRadius:"12px",
+                fontSize:"12.5px",color:cl.muted2,lineHeight:"1.65",border:`1px solid ${cl.green}33`}}>
+                ✅ <strong style={{color:cl.green}}>חודש רגיל לגמרי?</strong> אל תיגע בכלום — רק הזן את המד.
+              </div>
+            </Sec>
+
+            <Sec title="מה רואים במסך הסטטוס">
+              <Item icon="✅" label="הטבעת והמשפט">התשובה הקצרה: אתה בסדר, שים לב, או חרגת.</Item>
+              <Item icon="📊" label="מה מותר לי החודש">היתרה השנתית מחולקת בין החודשים שנשארו — כולל החודש הנוכחי.</Item>
+              <Item icon="📈" label="הגרף">ק״מ פרטי בכל חודש. הקו המקווקו הוא המכסה — עמודה מעליו היא חריגה. לחיצה על עמודה פותחת את החודש לעריכה.</Item>
+              <div style={{display:"flex",gap:"11px",padding:"11px 0"}}>
+                <span style={{fontSize:"17px",lineHeight:1.3,flexShrink:0,width:"22px",textAlign:"center"}}>▼</span>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:"13.5px",fontWeight:700,color:cl.text}}>פרטים נוספים</div>
+                  <div style={{fontSize:"12.5px",color:cl.muted,lineHeight:"1.6",marginTop:"2px"}}>
+                    ממוצע חודשי ותחזית לאן השנה מגיעה בקצב הנוכחי.
+                  </div>
+                </div>
+              </div>
+            </Sec>
+
+            <Sec title="לוח השנה">
+              <div style={{fontSize:"13px",color:cl.muted2,lineHeight:"1.7",marginBottom:"12px"}}>
+                נפתח מתוך מסך העדכון, למי שרוצה לסמן ימים מדויקים. לחיצה על יום מחליפה את הסטטוס שלו.
+              </div>
+              <div style={{display:"flex",flexDirection:"column",gap:"9px"}}>
+                {[["🚗","נסעתי לעבודה","נספר במכסת ימי העבודה"],
+                  ["🏠","לא נסעתי","היום הזה נחשב פרטי"],
+                  ["🟡","חג או חופש","ברירת מחדל בחגים — ניתן לשנות"],
+                  ["·","עוד לא הגיע","ימים עתידיים בחודש הנוכחי, לא נספרים"]].map(([i,t,d])=>(
+                  <div key={t} style={{display:"flex",gap:"10px",alignItems:"baseline"}}>
+                    <span style={{fontSize:"14px",width:"20px",textAlign:"center",flexShrink:0}}>{i}</span>
+                    <div style={{fontSize:"12.5px",color:cl.muted2}}>
+                      <strong style={{color:cl.text}}>{t}</strong> — {d}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Sec>
+
+            <Sec title="חשוב לדעת">
+              <Item icon="💾" label="הנתונים נשמרים רק בטלפון הזה">
+                ניקוי היסטוריית הדפדפן או החלפת מכשיר ימחקו הכל. גבה מדי פעם דרך ⚙️ ← גיבוי ושחזור.
+              </Item>
+              <div style={{display:"flex",gap:"11px",padding:"11px 0"}}>
+                <span style={{fontSize:"17px",lineHeight:1.3,flexShrink:0,width:"22px",textAlign:"center"}}>🔔</span>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:"13.5px",fontWeight:700,color:cl.text}}>תזכורות</div>
+                  <div style={{fontSize:"12.5px",color:cl.muted,lineHeight:"1.6",marginTop:"2px"}}>
+                    ב-1, 3 ו-6 בחודש, ואז מפסיקות. התראות פוש עובדות רק באנדרואיד עם האפליקציה מותקנת;
+                    באייפון תראה את התזכורת כשתפתח את האפליקציה.
+                  </div>
+                </div>
+              </div>
+            </Sec>
+
+            <div style={{textAlign:"center",fontSize:"11px",color:cl.muted,margin:"8px 0 16px"}}>
+              8-400 · made by illouzman
+            </div>
+            <button style={{...S.btnGhost,width:"100%",display:"flex",justifyContent:"center",padding:"13px"}}
               className="btn-ghost" onClick={()=>setShowAbout(false)}>סגור</button>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {dayModal && (()=>{
         const {iso, year, month, d} = dayModal;

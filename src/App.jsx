@@ -189,13 +189,13 @@ export default function App() {
 
   const [sf, setSf] = useState({yearStart:`${today.getFullYear()}-01-01`,startOdo:"",commute:"62",yearlyBudget:String(DEFAULT_BUDGET)});
 
-  const [uf, setUf] = useState({year:today.getFullYear(),month:today.getMonth(),odometer:"",dayOverrides:{},dailyLogs:{}});
+  const [uf, setUf] = useState({year:today.getFullYear(),month:today.getMonth(),odometer:"",dayOverrides:{}});
   const [showCalendar, setShowCalendar] = useState(false);
+  const [showDetails, setShowDetails]   = useState(false);
   // Synchronous mirror of `uf` — lets rapid stepper taps read the freshest value
   const ufRef = useRef(uf);
   ufRef.current = uf;
   const [dayModal, setDayModal] = useState(null); // {iso, year, month, d}
-  const [modalOdo, setModalOdo] = useState("");
   const [modalState, setModalState] = useState(null);
 
   const [didAutoCheckin,setDidAutoCheckin]=useState(false);
@@ -213,7 +213,7 @@ export default function App() {
       if(inYear && !d.months?.[pk]?.odometer){
         const ex=migrateEntry(d.months?.[pk]);
         setUf({year:pm.getFullYear(),month:pm.getMonth(),odometer:"",
-               dayOverrides:ex?.dayOverrides||{},dailyLogs:ex?.dailyLogs||{}});
+               dayOverrides:ex?.dayOverrides||{}});
       }
     }
   },[]);
@@ -307,7 +307,7 @@ export default function App() {
     }
     persistWith(prev=>{
       if(!prev?.setup) return prev;
-      const ex=migrateEntry(prev.months?.[mk])||{dayOverrides:{},dailyLogs:{}};
+      const ex=migrateEntry(prev.months?.[mk])||{dayOverrides:{}};
       return {...prev,months:{...(prev.months||{}),[mk]:{...ex,dayOverrides:apply(ex.dayOverrides||{})}}};
     });
     setUf(p=>(p.year!==y||p.month!==m)?p:{...p,dayOverrides:apply(p.dayOverrides)});
@@ -351,7 +351,7 @@ export default function App() {
     }
     if(!appData?.setup) return;
     const months={...(appData.months||{})};
-    for(const x of days) months[x.mk]=migrateEntry(months[x.mk])||{dayOverrides:{},dailyLogs:{}};
+    for(const x of days) months[x.mk]=migrateEntry(months[x.mk])||{dayOverrides:{}};
     // clear this week's overrides so a re-answer replaces the previous one
     for(const x of days){
       const ov={...(months[x.mk].dayOverrides||{})};
@@ -456,7 +456,7 @@ export default function App() {
       archive:[...(prev.archive||[]),{yearStart:prev.setup.yearStart,months:prev.months||{},
                budget:prev.setup.yearlyBudget||DEFAULT_BUDGET}],
     }));
-    setUf({year:today.getFullYear(),month:today.getMonth(),odometer:"",dayOverrides:{},dailyLogs:{}});
+    setUf({year:today.getFullYear(),month:today.getMonth(),odometer:"",dayOverrides:{}});
     showToast("שנה חדשה החלה ✓");
   }
 
@@ -570,51 +570,35 @@ export default function App() {
     return {totalKm,workDays,workKm,personal,prevOdo,gapMonths};
   },[uf.odometer,uf.year,uf.month,appData,getPrevInfo,ufWorkDays]);
 
-  const liveFromLogs=useMemo(()=>{
-    const logs=uf.dailyLogs||{};
-    const dates=Object.keys(logs).sort();
-    if(!dates.length||!appData?.setup) return null;
-    const latestDate=dates[dates.length-1];
-    const latestOdo=logs[latestDate];
-    const prevOdo=getPrevOdo(uf.year,uf.month);
-    const totalKm=latestOdo-prevOdo;
-    if(totalKm<0||isNaN(totalKm)) return null;
-    const dd=Number(latestDate.split("-")[2]);
-    let workKm=0;
-    for(let d=1;d<=dd;d++){
-      const iso=toISO(uf.year,uf.month,d);
-      if(getEffectiveState(iso,uf.year,uf.month,d,uf.dayOverrides)==="work") workKm+=(appData.setup.commute||62);
-    }
-    const personal=Math.max(0,totalKm-workKm);
-    return {totalKm,workKm,personal,latestDate};
-  },[uf.dailyLogs,uf.year,uf.month,uf.dayOverrides,appData,getPrevOdo]);
+
+  // The single "am I OK?" answer the dashboard leads with
+  const verdict = useMemo(()=>{
+    if(!annual) return null;
+    const over = annual.recordedCount>=2 && annual.overBy>0;
+    if(annual.remaining<=0) return {icon:"🔴",color:cl.red,tint:cl.redBg,title:"חרגת מהמכסה",
+      line:`ניצלת את כל ${annual.budget.toLocaleString()} הק״מ השנתיים.`};
+    if(over) return {icon:"⚠️",color:cl.orange,tint:cl.orangeBg,title:"צפויה חריגה",
+      line:<>בקצב הנוכחי תחרוג ב-<strong style={{color:cl.orange}}>{annual.overBy.toLocaleString()}</strong> ק״מ.
+            כדאי לרדת ל-{annual.allowance.toLocaleString()} ק״מ בחודש.</>};
+    if(annual.pct>=85) return {icon:"⚠️",color:cl.orange,tint:cl.orangeBg,title:"שים לב",
+      line:<>נשארו <strong style={{color:cl.orange}}>{annual.remaining.toLocaleString()}</strong> ק״מ בלבד
+            ל-{annual.monthsLeft} החודשים הבאים.</>};
+    return {icon:"✅",color:cl.green,tint:cl.greenBg,title:"אתה בסדר",
+      line:<>נשארו <strong style={{color:cl.text}}>{annual.remaining.toLocaleString()}</strong> ק״מ
+            מתוך {annual.budget.toLocaleString()}.</>};
+  },[annual,cl]);
 
   function openDayModal(iso, year, month, d){
-    const existing = (uf.dailyLogs||{})[iso];
-    setModalOdo(existing ? String(existing) : "");
     setModalState(getEffectiveState(iso, year, month, d, uf.dayOverrides));
     setDayModal({iso, year, month, d});
   }
 
+  // One decision per day now, so tapping a state saves and closes.
   function saveDayModal(newState){
     if(!dayModal) return;
-    const {iso, year, month, d} = dayModal;
-    const mk = mKey(year, month);
-    // update dayOverrides
-    const def = getDefaultState(iso, year, month, d);
-    const newOv = {...uf.dayOverrides};
-    if(newState === def) delete newOv[iso]; else newOv[iso] = newState;
-    // update dailyLogs
-    const newLogs = {...(uf.dailyLogs||{})};
-    if(modalOdo) newLogs[iso] = Number(modalOdo);
-    else delete newLogs[iso];
-    // persist
-    const ex = migrateEntry(appData?.months?.[mk]) || {dayOverrides:{}};
-    const updated = {...ex, dayOverrides: newOv, dailyLogs: newLogs};
-    persist({...appData, months:{...(appData.months||{}), [mk]: updated}});
-    setUf(prev => ({...prev, dayOverrides: newOv, dailyLogs: newLogs}));
+    const {year, month, d} = dayModal;
+    setDayState(year, month, d, newState);
     setDayModal(null);
-    showToast("נשמר ✓", cl.green);
   }
 
   function handleSetup(){
@@ -660,7 +644,7 @@ export default function App() {
     const mk=mKey(uf.year,uf.month);
     const newData={
       ...appData,
-      months:{...(appData.months||{}),[mk]:{odometer:Number(uf.odometer),dayOverrides:uf.dayOverrides,dailyLogs:uf.dailyLogs||{},savedAt:new Date().toISOString()}}
+      months:{...(appData.months||{}),[mk]:{odometer:Number(uf.odometer),dayOverrides:uf.dayOverrides,savedAt:new Date().toISOString()}}
     };
     persist(newData);
     showToast(`${MONTH_HE[uf.month]} נשמר ✓`);
@@ -670,7 +654,7 @@ export default function App() {
   function openUpdate(year,month){
     const mk=mKey(year,month);
     const ex=migrateEntry(appData?.months?.[mk]);
-    setUf({year,month,odometer:ex?.odometer?.toString()||"",dayOverrides:ex?.dayOverrides||{},dailyLogs:ex?.dailyLogs||{}});
+    setUf({year,month,odometer:ex?.odometer?.toString()||"",dayOverrides:ex?.dayOverrides||{}});
     setTab("update");
   }
 
@@ -680,7 +664,7 @@ export default function App() {
       const y=d.getFullYear(),m=d.getMonth();
       const mk=mKey(y,m);
       const ex=migrateEntry(appData?.months?.[mk]);
-      return {year:y,month:m,odometer:ex?.odometer?.toString()||"",dayOverrides:ex?.dayOverrides||{},dailyLogs:ex?.dailyLogs||{}};
+      return {year:y,month:m,odometer:ex?.odometer?.toString()||"",dayOverrides:ex?.dayOverrides||{}};
     });
   }
 
@@ -782,51 +766,27 @@ export default function App() {
             const holiday=HOLIDAYS[iso];
             const isToday=iso===toISO(new Date().getFullYear(),new Date().getMonth(),new Date().getDate());
 
-            const hasOdo = !!(uf.dailyLogs||{})[iso];
             return(
               <div key={i} className="day-cell" onClick={()=>openDayModal(iso,year,month,d)}
                 style={{textAlign:"center",padding:"4px 2px",borderRadius:"8px",background:cfg.bg,
-                  border:`1px solid ${isToday?cl.accent:hasOdo?"rgba(251,191,36,0.5)":cfg.border}`,
+                  border:`1px solid ${isToday?cl.accent:cfg.border}`,
                   color:cfg.color,cursor:"pointer",height:"44px",overflow:"hidden",
                   display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:"1px"}}>
                 <span style={{fontSize:"13px",fontWeight:700,lineHeight:1}}>{d}</span>
-                {hasOdo
-                  ? <span style={{fontSize:"8px",lineHeight:1,color:cl.yellow}}>📍</span>
-                  : holiday
+                {holiday
                     ? <span style={{fontSize:"6px",fontWeight:700,lineHeight:"1.1",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",paddingInline:"2px",opacity:0.9}}>{holiday}</span>
-                    : <span style={{fontSize:"10px",lineHeight:1}}>{cfg.icon}</span>
+                  : <span style={{fontSize:"10px",lineHeight:1}}>{cfg.icon}</span>
                 }
               </div>
             );
           })}
         </div>
-        <p style={{fontSize:"11px",color:cl.muted,margin:"10px 0 0",textAlign:"center"}}>לחץ על יום לעדכון ומד ק״מ</p>
+        <p style={{fontSize:"11px",color:cl.muted,margin:"10px 0 0",textAlign:"center"}}>לחץ על יום כדי לשנות את הסטטוס שלו</p>
       </div>
     );
   }
 
-  function renderTimeline(){
-    if(!annual) return null;
-    return(
-      <div style={{display:"flex",gap:"5px",flexWrap:"wrap"}}>
-        {annual.months.map(({year,month,key})=>{
-          const s=annual.byMonth[key];
-          const isCurr=key===todayKey;
-          let bg=isDark?"rgba(255,255,255,0.05)":"rgba(0,0,0,0.05)", textC=cl.muted, borderC="transparent";
-          if(s){ bg=s.personal>annual.allowance*1.2?cl.redBg:cl.greenBg; textC=s.personal>annual.allowance*1.2?cl.red:cl.green; }
-          else if(isCurr){ bg=cl.accentBg; textC=cl.accent; }
-          if(isCurr) borderC=cl.accent;
 
-          return(
-            <div key={key} className="month-pill" onClick={()=>openUpdate(year,month)}
-              style={{padding:"6px 10px",borderRadius:"10px",background:bg,cursor:"pointer",border:`1.5px solid ${borderC}`,color:textC,fontSize:"12px",minWidth:"42px",textAlign:"center",fontWeight:isCurr?700:500}}>
-              {MONTH_HE[month].slice(0,3)}
-            </div>
-          );
-        })}
-      </div>
-    );
-  }
 
   function renderBarChart(){
     if(!annual) return null;
@@ -855,7 +815,8 @@ export default function App() {
               const isCurr=key===todayKey;
               const barH=s?Math.max(3,Math.round((s.personal/yMax)*chartH)):0;
               return(
-                <div key={key} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:"2px"}}>
+                <div key={key} className="month-pill" onClick={()=>openUpdate(year,month)}
+                  style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:"2px",cursor:"pointer"}}>
                   <div className={s&&!isFuture?"bar-seg":undefined}
                     style={{width:"100%",height:`${barH||2}px`,
                       background:isFuture?(isDark?"rgba(255,255,255,0.04)":"rgba(0,0,0,0.06)"):s?barGrad(s.personal):(isDark?"rgba(255,255,255,0.07)":"rgba(0,0,0,0.07)"),
@@ -898,146 +859,116 @@ export default function App() {
           ))}
         </div>
 
-        {tab==="dashboard" && (
+        {tab==="dashboard" && annual && (
           <div className="tab-content">
-            {/* Year finished → roll over */}
-            {annual?.yearEnded && (
-              <div className="reminder-banner km-card" style={{...S.card,background:cl.accentBg,
-                border:`1px solid ${cl.accent}44`,marginBottom:"14px"}}>
-                <div style={{fontWeight:700,fontSize:"15px",color:cl.accent,marginBottom:"6px"}}>🎉 שנת המדידה הסתיימה</div>
-                <div style={{fontSize:"13px",color:cl.muted2,lineHeight:"1.6",marginBottom:"14px"}}>
-                  סיימת עם <strong style={{color:cl.text}}>{annual.totalPersonal.toLocaleString()}</strong> ק״מ פרטי
-                  מתוך {annual.budget.toLocaleString()}. אפשר להתחיל שנה חדשה — הנתונים יישמרו בארכיון.
-                </div>
-                <button className="btn-main" style={{...S.btn,marginTop:0}} onClick={startNewYear}>
-                  התחל שנה חדשה ←
-                </button>
-              </div>
-            )}
-
-            {/* Weekly check-in — one tap beats remembering a month back */}
-            {annual && !annual.yearEnded && today.getDay()>=4 && appData?.lastWeekLogged!==weekKeyOf(today) && (
-              <div className="reminder-banner km-card" style={{...S.card,background:cl.greenBg,
-                border:`1px solid ${cl.green}44`,marginBottom:"14px"}}>
-                <div style={{fontWeight:700,fontSize:"15px",color:cl.green,marginBottom:"4px"}}>📅 סיכום שבועי</div>
-                <div style={{fontSize:"13px",color:cl.muted2,lineHeight:"1.6",marginBottom:"14px"}}>
-                  כמה ימים נסעת לעבודה השבוע?
-                </div>
-                <div style={{display:"flex",gap:"7px"}}>
-                  {[0,1,2,3,4,5].map(n=>(
-                    <button key={n} onClick={()=>applyWeeklyCheckin(n)}
-                      style={{flex:1,padding:"14px 0",borderRadius:"12px",border:`1px solid ${cl.green}55`,
-                        background:cl.surface,color:cl.text,fontSize:"17px",fontWeight:800,
-                        cursor:"pointer",fontFamily:"inherit"}}>{n}</button>
-                  ))}
-                </div>
-                <button style={{...S.btnGhost,width:"100%",marginTop:"10px",display:"flex",
-                  justifyContent:"center",padding:"10px"}} className="btn-ghost"
-                  onClick={skipWeeklyCheckin}>דלג השבוע</button>
-              </div>
-            )}
-
-            {annual && !annual.yearEnded && !annual.byMonth[todayKey] && reminderDismissed!==todayKey && (
-              <div className="reminder-banner km-card" style={{...S.card,background:"rgba(251,191,36,0.07)",border:"1px solid rgba(251,191,36,0.2)",display:"flex",alignItems:"flex-start",gap:"14px",marginBottom:"14px"}}>
-                <span style={{fontSize:"22px",lineHeight:1,marginTop:"2px"}}>🔔</span>
-                <div style={{flex:1}}>
-                  <div style={{fontWeight:700,fontSize:"14px",color:cl.yellow,marginBottom:"5px"}}>תזכורת חודשית</div>
-                  <div style={{fontSize:"13px",color:"rgba(251,191,36,0.75)",lineHeight:"1.6"}}>
-                    עוד לא הזנת את מד הק"מ לחודש <strong style={{color:cl.yellow}}>{MONTH_HE[today.getMonth()]}</strong>.
+            {/* Exactly one action card — whichever matters most right now */}
+            {(()=>{
+              if(annual.yearEnded) return(
+                <div className="reminder-banner km-card" style={{...S.card,background:cl.accentBg,border:`1px solid ${cl.accent}44`}}>
+                  <div style={{fontWeight:700,fontSize:"15px",color:cl.accent,marginBottom:"6px"}}>🎉 שנת המדידה הסתיימה</div>
+                  <div style={{fontSize:"13px",color:cl.muted2,lineHeight:"1.6",marginBottom:"14px"}}>
+                    סיימת עם <strong style={{color:cl.text}}>{annual.totalPersonal.toLocaleString()}</strong> ק״מ פרטי
+                    מתוך {annual.budget.toLocaleString()}. הנתונים יישמרו בארכיון.
                   </div>
+                  <button className="btn-main" style={{...S.btn,marginTop:0}} onClick={startNewYear}>התחל שנה חדשה ←</button>
+                </div>
+              );
+              if(!annual.byMonth[todayKey] && reminderDismissed!==todayKey) return(
+                <div className="reminder-banner km-card" style={{...S.card,background:cl.yellowBg,border:`1px solid ${cl.yellow}44`}}>
+                  <div style={{fontWeight:700,fontSize:"15px",color:cl.yellow,marginBottom:"6px"}}>🔔 עוד לא עדכנת את {MONTH_HE[today.getMonth()]}</div>
                   <div style={{display:"flex",gap:"8px",marginTop:"12px"}}>
-                    <button className="btn-main" style={{...S.btn,marginTop:0,padding:"9px 18px",fontSize:"13px",width:"auto",background:"linear-gradient(135deg,#92400e,#fbbf24)"}}
-                      onClick={()=>{ setTab("update"); setUf(f=>({...f,year:today.getFullYear(),month:today.getMonth()})); }}>
-                      עדכן עכשיו ←
-                    </button>
+                    <button className="btn-main" style={{...S.btn,marginTop:0,padding:"11px 20px",fontSize:"13px",width:"auto",background:"linear-gradient(135deg,#92400e,#fbbf24)"}}
+                      onClick={()=>{setTab("update");openUpdate(today.getFullYear(),today.getMonth());}}>עדכן עכשיו ←</button>
                     <button style={S.btnGhost} className="btn-ghost" onClick={dismissReminder}>אחר כך</button>
                   </div>
                 </div>
-              </div>
-            )}
-            {/* Hero card */}
-            <div className="km-card" style={{...S.card,background:"linear-gradient(145deg,rgba(124,58,237,0.15) 0%,rgba(52,211,153,0.06) 100%)",border:"1px solid rgba(167,139,250,0.18)"}}>
-              <div style={S.sectionTitle}>נותר לנסוע השנה</div>
-              <div style={{display:"flex",alignItems:"center",gap:"20px"}}>
-                <div style={{position:"relative",flexShrink:0}}>
-                  <RingProgress pct={annual.pct} color={annual.pct>90?cl.red:annual.pct>70?cl.orange:cl.accent} trackColor={isDark?"rgba(255,255,255,0.07)":"rgba(0,0,0,0.07)"}/>
-                  <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
-                    <div style={{fontSize:"15px",fontWeight:800,color:annual.pct>90?cl.red:cl.muted2}}>{annual.pct}%</div>
-                    <div style={{fontSize:"9px",color:cl.muted,letterSpacing:"0.5px"}}>נוצל</div>
+              );
+              if(today.getDay()>=4 && appData?.lastWeekLogged!==weekKeyOf(today)) return(
+                <div className="reminder-banner km-card" style={{...S.card,background:cl.greenBg,border:`1px solid ${cl.green}44`}}>
+                  <div style={{fontWeight:700,fontSize:"15px",color:cl.green,marginBottom:"14px"}}>📅 כמה ימים נסעת לעבודה השבוע?</div>
+                  <div style={{display:"flex",gap:"7px"}}>
+                    {[0,1,2,3,4,5].map(n=>(
+                      <button key={n} onClick={()=>applyWeeklyCheckin(n)}
+                        style={{flex:1,padding:"14px 0",borderRadius:"12px",border:`1px solid ${cl.green}55`,
+                          background:cl.surface,color:cl.text,fontSize:"17px",fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>{n}</button>
+                    ))}
                   </div>
+                  <button style={{...S.btnGhost,width:"100%",marginTop:"10px",display:"flex",justifyContent:"center",padding:"10px"}}
+                    className="btn-ghost" onClick={skipWeeklyCheckin}>דלג השבוע</button>
                 </div>
-                <div style={{flex:1}}>
-                  <div className="stat-num" style={{fontSize:"52px",fontWeight:800,lineHeight:1,background:annual.remaining<1000?"linear-gradient(135deg,#f87171,#fca5a5)":annual.pct>70?"linear-gradient(135deg,#fb923c,#fcd34d)":"linear-gradient(135deg,#a78bfa,#34d399)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",backgroundClip:"text"}}>
-                    {annual.remaining.toLocaleString()}
-                  </div>
-                  <div style={{fontSize:"13px",color:cl.muted,marginTop:"6px"}}>מתוך <span style={{color:cl.muted2,fontWeight:600}}>{annual.budget.toLocaleString()}</span> ק"מ שנתי</div>
-                  <div style={{background:isDark?"rgba(255,255,255,0.07)":"rgba(0,0,0,0.07)",borderRadius:"8px",height:"6px",marginTop:"14px",overflow:"hidden"}}>
-                    <div className="progress-fill" style={{width:`${annual.pct}%`,height:"100%",borderRadius:"8px",background:annual.pct>90?"linear-gradient(90deg,#f87171,#fca5a5)":annual.pct>70?"linear-gradient(90deg,#fb923c,#fcd34d)":"linear-gradient(90deg,#7c3aed,#a78bfa)"}}/>
-                  </div>
+              );
+              return null;
+            })()}
+
+            {/* The one answer: am I OK? */}
+            <div className="km-card" style={{...S.card,textAlign:"center",paddingTop:"28px",paddingBottom:"26px",
+              background:`linear-gradient(160deg,${verdict.tint} 0%,transparent 75%)`,border:`1px solid ${verdict.color}33`}}>
+              <div style={{position:"relative",width:"120px",margin:"0 auto"}}>
+                <RingProgress pct={annual.pct} color={verdict.color} trackColor={isDark?"rgba(255,255,255,0.07)":"rgba(0,0,0,0.07)"}/>
+                <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
+                  <div style={{fontSize:"30px",lineHeight:1}}>{verdict.icon}</div>
                 </div>
               </div>
+              <div style={{fontSize:"19px",fontWeight:800,color:verdict.color,marginTop:"14px"}}>{verdict.title}</div>
+              <div style={{fontSize:"14px",color:cl.muted2,marginTop:"8px",lineHeight:"1.6"}}>{verdict.line}</div>
             </div>
-            {/* Allowance card */}
+
+            {/* This month, in the terms people actually think in */}
             <div className="km-card" style={S.card}>
-              <div style={S.sectionTitle}>מכסה לחודש הנוכחי</div>
-              <div style={{display:"flex",alignItems:"flex-end",gap:"8px"}}>
-                <div className="stat-num" style={{fontSize:"44px",fontWeight:800,lineHeight:1,background:"linear-gradient(135deg,#818cf8,#a78bfa)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",backgroundClip:"text"}}>
+              <div style={S.sectionTitle}>מה מותר לי החודש</div>
+              <div style={{display:"flex",alignItems:"baseline",gap:"8px"}}>
+                <div className="stat-num" style={{fontSize:"42px",fontWeight:800,lineHeight:1,color:cl.text}}>
                   {annual.allowance.toLocaleString()}
                 </div>
-                <div style={{fontSize:"14px",color:cl.muted,marginBottom:"6px"}}>ק"מ</div>
-              </div>
-              <div style={{fontSize:"12px",color:cl.muted,marginTop:"6px"}}>
-                יתרת ק״מ מחולקת בין {annual.monthsLeft} חודשים — מהחודש הנוכחי עד סוף השנה
+                <div style={{fontSize:"14px",color:cl.muted}}>ק"מ</div>
               </div>
               <div style={{marginTop:"14px",paddingTop:"14px",borderTop:`1px solid ${cl.border}`,
                 display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <span style={{fontSize:"13px",color:cl.muted2}}>נשארו {annual.daysLeftInMonth} ימים בחודש</span>
+                <span style={{fontSize:"13px",color:cl.muted2}}>נשארו {annual.daysLeftInMonth} ימים</span>
                 <span style={S.badge(cl.blue,cl.blueBg)}>≈ {annual.perDay.toLocaleString()} ק״מ ליום</span>
               </div>
             </div>
 
-            {/* Forecast — where this year lands at the current pace */}
-            {annual.recordedCount>=2 && (
-              <div className="km-card" style={{...S.card,
-                background:annual.overBy>0?cl.redBg:cl.greenBg,
-                border:`1px solid ${annual.overBy>0?cl.red:cl.green}33`}}>
-                <div style={S.sectionTitle}>תחזית לסוף השנה</div>
-                <div style={{display:"flex",alignItems:"flex-end",gap:"8px"}}>
-                  <div className="stat-num" style={{fontSize:"36px",fontWeight:800,lineHeight:1,
-                    color:annual.overBy>0?cl.red:cl.green}}>
-                    {annual.projected.toLocaleString()}
-                  </div>
-                  <div style={{fontSize:"13px",color:cl.muted,marginBottom:"5px"}}>ק"מ</div>
-                </div>
-                <div style={{fontSize:"13px",color:cl.muted2,marginTop:"8px",lineHeight:"1.6"}}>
-                  {annual.overBy>0
-                    ? <>בקצב הנוכחי תחרוג ב-<strong style={{color:cl.red}}>{annual.overBy.toLocaleString()}</strong> ק״מ.
-                        כדאי לרדת ל-{Math.max(0,annual.allowance).toLocaleString()} ק״מ בחודש.</>
-                    : <>אתה בכיוון טוב — צפוי להישאר עם <strong style={{color:cl.green}}>{Math.abs(annual.overBy).toLocaleString()}</strong> ק״מ עודפים.</>}
-                  <span style={{color:cl.muted}}> (ממוצע {Math.round(annual.avg).toLocaleString()} ק״מ לחודש)</span>
-                </div>
-              </div>
-            )}
-
-            {/* Tell the user when precision doesn't matter — removes the guilt */}
-            {!annual.precisionMatters && annual.recordedCount>=1 && (
-              <div style={{...S.card,background:cl.greenBg,border:`1px solid ${cl.green}33`,
-                display:"flex",gap:"12px",alignItems:"flex-start"}}>
-                <span style={{fontSize:"20px",lineHeight:1,marginTop:"1px"}}>✅</span>
-                <div style={{fontSize:"13px",color:cl.muted2,lineHeight:"1.6"}}>
-                  <strong style={{color:cl.green}}>אתה רחוק מהגבול</strong> — לא צריך לדייק בספירת הימים.
-                  יום עבודה אחד שווה {annual.commute} ק״מ, פחות מ-8% מהיתרה שלך.
-                </div>
-              </div>
-            )}
+            {/* Chart doubles as the year timeline — tap a bar to edit that month */}
             <div className="km-card" style={S.card}>
-              <div style={S.sectionTitle}>ק"מ פרטי לפי חודש</div>
+              <div style={S.sectionTitle}>לפי חודש · לחץ לעריכה</div>
               {renderBarChart()}
             </div>
-            <div className="km-card" style={{...S.card,marginBottom:0}}>
-              <div style={S.sectionTitle}>ציר זמן שנתי</div>
-              {renderTimeline()}
-            </div>
+
+            {/* Everything else lives behind one toggle */}
+            <button className="btn-ghost" onClick={()=>setShowDetails(v=>!v)}
+              style={{width:"100%",padding:"13px",borderRadius:"14px",border:`1px solid ${cl.border}`,
+                background:"transparent",color:cl.muted2,fontSize:"13px",cursor:"pointer",fontFamily:"inherit"}}>
+              {showDetails?"▲ הסתר פרטים":"▼ פרטים נוספים"}
+            </button>
+
+            {showDetails && (
+              <div style={{marginTop:"14px"}}>
+                <div className="km-card" style={S.card}>
+                  <div style={S.sectionTitle}>מספרים</div>
+                  {[["נוצל עד כה",`${annual.totalPersonal.toLocaleString()} ק"מ`],
+                    ["תקציב שנתי",`${annual.budget.toLocaleString()} ק"מ`],
+                    ["ממוצע חודשי",annual.recordedCount?`${Math.round(annual.avg).toLocaleString()} ק"מ`:"—"],
+                    ["תחזית לסוף השנה",annual.recordedCount>=2?`${annual.projected.toLocaleString()} ק"מ`:"—"],
+                    ["חודשים שנותרו",String(annual.monthsLeft)]].map(([k,v],i,arr)=>(
+                    <div key={k} style={{...S.row,borderBottom:i===arr.length-1?"none":`1px solid ${cl.border}`}}>
+                      <span style={{color:cl.muted}}>{k}</span>
+                      <span style={{color:cl.text,fontWeight:700}}>{v}</span>
+                    </div>
+                  ))}
+                </div>
+                {!annual.precisionMatters && annual.recordedCount>=1 && (
+                  <div style={{...S.card,background:cl.greenBg,border:`1px solid ${cl.green}33`,
+                    display:"flex",gap:"12px",alignItems:"flex-start",marginBottom:0}}>
+                    <span style={{fontSize:"20px",lineHeight:1,marginTop:"1px"}}>✅</span>
+                    <div style={{fontSize:"13px",color:cl.muted2,lineHeight:"1.6"}}>
+                      אתה רחוק מהגבול — לא צריך לדייק בספירת הימים.
+                      יום עבודה אחד שווה {annual.commute} ק״מ בלבד מתוך היתרה.
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -1126,16 +1057,6 @@ export default function App() {
               </div>
             )}
 
-            {liveFromLogs&&(
-              <div style={{marginTop:"14px",padding:"14px",background:"rgba(52,211,153,0.07)",borderRadius:"12px",border:"1px solid rgba(52,211,153,0.2)"}}>
-                <div style={{fontSize:"10px",color:cl.green,textTransform:"uppercase",letterSpacing:"1px",marginBottom:"8px",fontWeight:700}}>סטטוס חי · {liveFromLogs.latestDate}</div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"8px",textAlign:"center"}}>
-                  <div><div style={{fontSize:"18px",fontWeight:800,color:cl.text}}>{liveFromLogs.totalKm}</div><div style={{fontSize:"10px",color:cl.muted}}>סה״כ</div></div>
-                  <div><div style={{fontSize:"18px",fontWeight:800,color:cl.blue}}>{liveFromLogs.workKm}</div><div style={{fontSize:"10px",color:cl.muted}}>עבודה</div></div>
-                  <div><div style={{fontSize:"18px",fontWeight:800,color:liveFromLogs.personal>annual?.allowance?cl.orange:cl.green}}>{liveFromLogs.personal}</div><div style={{fontSize:"10px",color:cl.muted}}>פרטי</div></div>
-                </div>
-              </div>
-            )}
 
             <button className="btn-main" style={S.btn} onClick={handleSave}>שמור עדכון ✓</button>
           </div>
@@ -1178,10 +1099,16 @@ export default function App() {
       </div>
 
       {showSettings && (
-        <div className="modal-overlay-anim" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",backdropFilter:"blur(8px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:100,padding:"20px",direction:"rtl"}}>
-          <div className="modal-card-anim" style={{...S.card,width:"100%",maxWidth:"360px",marginBottom:0,border:"1px solid rgba(167,139,250,0.2)",maxHeight:"88vh",overflowY:"auto"}}>
-            <div style={{fontSize:"18px",fontWeight:800,color:cl.text,marginBottom:"4px"}}>הגדרות</div>
-            <div style={{fontSize:"12px",color:cl.muted,marginBottom:"20px"}}>עריכת פרמטרי חישוב</div>
+        <div className="modal-overlay-anim" style={{position:"fixed",inset:0,background:cl.bg,zIndex:100,
+          overflowY:"auto",direction:"rtl",padding:"20px 16px 40px",display:"flex",justifyContent:"center"}}>
+          <div style={{width:"100%",maxWidth:"430px"}}>
+            <div style={{display:"flex",alignItems:"center",gap:"12px",paddingBottom:"18px",marginBottom:"18px",
+              borderBottom:`1px solid ${cl.border}`}}>
+              <button style={{...S.btnGhost,padding:"9px 14px",fontSize:"16px"}} className="btn-ghost"
+                onClick={()=>setShowSettings(false)}>→</button>
+              <div style={{fontSize:"20px",fontWeight:800,color:cl.text}}>הגדרות</div>
+            </div>
+            <div style={{...S.card,marginBottom:0}}>
             <label style={{...S.label,marginTop:0}}>הלוך-חזור לעבודה (ק"מ ביום)</label>
             <input style={S.input} type="number" value={settingsForm.commute}
               onChange={e=>setSettingsForm({...settingsForm,commute:e.target.value})}/>
@@ -1252,8 +1179,7 @@ export default function App() {
               <button style={{width:"100%",padding:"12px",borderRadius:"12px",background:cl.redBg,border:`1px solid rgba(220,38,38,0.25)`,color:cl.red,fontSize:"13px",fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}
                 onClick={doReset}>🗑 איפוס כל הנתונים</button>
             </div>
-            <button style={{...S.btnGhost,width:"100%",marginTop:"8px",justifyContent:"center",display:"flex",padding:"12px"}}
-              className="btn-ghost" onClick={()=>setShowSettings(false)}>ביטול</button>
+            </div>
           </div>
         </div>
       )}
@@ -1315,38 +1241,17 @@ export default function App() {
                   {holiday && <div style={{fontSize:"12px",color:cl.yellow,marginTop:"3px"}}>{holiday}</div>}
                 </div>
               </div>
-              {/* state toggle — select only, save via button */}
-              <div style={{fontSize:"11px",fontWeight:700,color:cl.muted,textTransform:"uppercase",letterSpacing:"1px",marginBottom:"8px"}}>סטטוס יום</div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"8px",marginBottom:"20px"}}>
+              {/* One decision — tapping saves and closes */}
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"8px"}}>
                 {Object.entries(STATE_CFG_MODAL).map(([k,c])=>(
-                  <button key={k} onClick={()=>setModalState(k)}
-                    style={{padding:"12px 6px",borderRadius:"12px",border:`2px solid ${cur===k?c.border:"transparent"}`,
+                  <button key={k} onClick={()=>saveDayModal(k)}
+                    style={{padding:"18px 6px",borderRadius:"14px",border:`2px solid ${cur===k?c.border:"transparent"}`,
                       background:cur===k?c.bg:cl.surface2,cursor:"pointer",textAlign:"center",
                       transition:"all 0.15s",outline:"none",fontFamily:"inherit"}}>
-                    <div style={{fontSize:"20px",marginBottom:"4px"}}>{c.icon}</div>
-                    <div style={{fontSize:"11px",fontWeight:700,color:cur===k?c.color:cl.muted}}>{c.label}</div>
+                    <div style={{fontSize:"26px",marginBottom:"6px"}}>{c.icon}</div>
+                    <div style={{fontSize:"12px",fontWeight:700,color:cur===k?c.color:cl.muted}}>{c.label}</div>
                   </button>
                 ))}
-              </div>
-              {/* odometer input */}
-              <div style={{fontSize:"11px",fontWeight:700,color:cl.muted,textTransform:"uppercase",letterSpacing:"1px",marginBottom:"8px"}}>קריאת מד (אופציונלי)</div>
-              <div style={{display:"flex",gap:"8px",alignItems:"center"}}>
-                <input style={{...S.input,flex:1,fontSize:"18px",padding:"14px 16px"}}
-                  type="number" placeholder="למשל: 47500"
-                  value={modalOdo} onChange={e=>setModalOdo(e.target.value)}/>
-                {modalOdo&&(
-                  <button onClick={()=>setModalOdo("")}
-                    style={{background:cl.redBg,border:`1px solid rgba(248,113,113,0.3)`,borderRadius:"10px",padding:"12px",cursor:"pointer",color:cl.red,fontSize:"16px",lineHeight:1}}>✕</button>
-                )}
-              </div>
-              <p style={{fontSize:"12px",color:cl.muted,margin:"8px 0 20px",lineHeight:"1.5"}}>
-                הזן את מד הק״מ הנוכחי כדי לקבל סטטוס חי של ק״מ פרטי עד היום
-              </p>
-              <div style={{display:"flex",gap:"10px"}}>
-                <button className="btn-main" style={{...S.btn,marginTop:0,flex:1}}
-                  onClick={()=>saveDayModal(cur)}>שמור ✓</button>
-                <button style={{...S.btnGhost,padding:"14px 18px",fontSize:"14px"}}
-                  className="btn-ghost" onClick={()=>setDayModal(null)}>ביטול</button>
               </div>
             </div>
           </div>

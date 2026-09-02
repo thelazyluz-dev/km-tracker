@@ -70,13 +70,6 @@ function weekKeyOf(dt){
   return toISO(s.getFullYear(),s.getMonth(),s.getDate());
 }
 
-// Great-circle distance in metres
-function distanceM(lat1,lng1,lat2,lng2){
-  const R=6371000, rad=x=>x*Math.PI/180;
-  const dLat=rad(lat2-lat1), dLng=rad(lng2-lng1);
-  const a=Math.sin(dLat/2)**2+Math.cos(rad(lat1))*Math.cos(rad(lat2))*Math.sin(dLng/2)**2;
-  return 2*R*Math.asin(Math.min(1,Math.sqrt(a)));
-}
 
 function loadData() { try{return JSON.parse(localStorage.getItem(KEY));}catch{return null;} }
 function saveData(d) { try{localStorage.setItem(KEY,JSON.stringify(d));}catch{} }
@@ -127,23 +120,27 @@ const clLight = {
   blueBg:       "rgba(79,70,229,0.1)",
 };
 
+// Hebrew letterforms aren't designed for tracking, and uppercase is a no-op —
+// so section labels get weight and colour instead of spacing.
+const FONT = "-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',system-ui,sans-serif";
+
 function makeS(cl){
   return {
-    page:  {minHeight:"100vh",background:cl.bg,display:"flex",justifyContent:"center",padding:"24px 16px 80px",fontFamily:"-apple-system,BlinkMacSystemFont,'SF Pro Display',system-ui,sans-serif",direction:"rtl"},
+    page:  {minHeight:"100vh",background:cl.bg,display:"flex",justifyContent:"center",padding:"20px 16px 32px",fontFamily:FONT,direction:"rtl"},
     wrap:  {width:"100%",maxWidth:"430px"},
-    card:  {background:cl.surface,borderRadius:"20px",padding:"22px 24px",marginBottom:"14px",border:`1px solid ${cl.border}`},
-    cardYellow: {background:"rgba(251,191,36,0.07)",borderRadius:"20px",padding:"18px 20px",marginBottom:"14px",border:"1px solid rgba(251,191,36,0.18)"},
-    sectionTitle: {fontSize:"10px",fontWeight:700,color:cl.muted,textTransform:"uppercase",letterSpacing:"1.5px",margin:"0 0 16px"},
-    h1:    {fontSize:"28px",fontWeight:800,color:cl.text,margin:0,letterSpacing:"-0.5px"},
-    label: {display:"block",fontSize:"11px",fontWeight:600,color:cl.muted,marginBottom:"8px",marginTop:"20px",textTransform:"uppercase",letterSpacing:"1px"},
-    hint:  {fontSize:"12px",color:cl.muted,marginTop:"5px",lineHeight:"1.6"},
-    input: {width:"100%",background:cl.surface2,border:`1px solid ${cl.border}`,borderRadius:"12px",color:cl.text,fontSize:"16px",padding:"14px 16px",boxSizing:"border-box",outline:"none",fontFamily:"inherit"},
-    btn:   {width:"100%",marginTop:"20px",padding:"16px",borderRadius:"14px",background:"linear-gradient(135deg,#7c3aed 0%,#a78bfa 100%)",color:"#fff",fontWeight:700,fontSize:"15px",border:"none",cursor:"pointer",fontFamily:"inherit",letterSpacing:"0.3px"},
-    btnGhost: {padding:"9px 16px",borderRadius:"10px",background:"transparent",border:`1px solid ${cl.border}`,color:cl.muted2,fontSize:"13px",cursor:"pointer",fontFamily:"inherit"},
-    tab:  (a)=>({flex:1,padding:"10px 4px",background:a?"rgba(167,139,250,0.12)":"transparent",color:a?cl.accent:cl.muted,border:"none",cursor:"pointer",fontWeight:a?700:400,fontSize:"13px",fontFamily:"inherit",borderRadius:"9px"}),
-    tabs: {display:"flex",background:cl.surface2,borderRadius:"14px",padding:"4px",marginBottom:"20px",border:`1px solid ${cl.border}`},
-    row:  {display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 0",borderBottom:`1px solid ${cl.border}`,fontSize:"14px"},
-    badge:(c,bg)=>({display:"inline-flex",alignItems:"center",padding:"4px 12px",borderRadius:"20px",fontSize:"12px",fontWeight:700,color:c,background:bg}),
+    card:  {background:cl.surface,borderRadius:"18px",padding:"20px",marginBottom:"12px",border:`1px solid ${cl.border}`},
+    cardYellow: {background:cl.yellowBg,borderRadius:"18px",padding:"18px 20px",marginBottom:"12px",border:`1px solid ${cl.yellow}33`},
+    sectionTitle: {fontSize:"13px",fontWeight:700,color:cl.muted2,margin:"0 0 14px"},
+    h1:    {fontSize:"26px",fontWeight:800,color:cl.text,margin:0},
+    label: {display:"block",fontSize:"13px",fontWeight:600,color:cl.muted2,marginBottom:"8px",marginTop:"20px"},
+    hint:  {fontSize:"12.5px",color:cl.muted,marginTop:"6px",lineHeight:"1.65"},
+    input: {width:"100%",background:cl.surface2,border:`1px solid ${cl.border}`,borderRadius:"12px",color:cl.text,fontSize:"17px",fontWeight:600,padding:"15px 16px",boxSizing:"border-box",outline:"none",fontFamily:FONT},
+    btn:   {width:"100%",marginTop:"20px",padding:"16px",borderRadius:"14px",background:"linear-gradient(135deg,#7c3aed 0%,#a78bfa 100%)",color:"#fff",fontWeight:700,fontSize:"15px",border:"none",cursor:"pointer",fontFamily:FONT},
+    btnGhost: {padding:"10px 15px",borderRadius:"11px",background:"transparent",border:`1px solid ${cl.border}`,color:cl.muted2,fontSize:"13.5px",fontWeight:600,cursor:"pointer",fontFamily:FONT},
+    tab:  (a)=>({flex:1,padding:"11px 4px",background:a?cl.surface:"transparent",color:a?cl.text:cl.muted,border:"none",cursor:"pointer",fontWeight:a?700:500,fontSize:"14px",fontFamily:FONT,borderRadius:"10px",boxShadow:a?"0 1px 4px rgba(0,0,0,0.12)":"none",transition:"all .18s"}),
+    tabs: {display:"flex",background:cl.surface2,borderRadius:"14px",padding:"4px",marginBottom:"18px",border:`1px solid ${cl.border}`},
+    row:  {display:"flex",justifyContent:"space-between",alignItems:"center",padding:"13px 0",borderBottom:`1px solid ${cl.border}`,fontSize:"14px"},
+    badge:(c,bg)=>({display:"inline-flex",alignItems:"center",padding:"5px 12px",borderRadius:"20px",fontSize:"12.5px",fontWeight:700,color:c,background:bg}),
   };
 }
 
@@ -198,8 +195,6 @@ export default function App() {
   const [dayModal, setDayModal] = useState(null); // {iso, year, month, d}
   const [modalState, setModalState] = useState(null);
 
-  const [didAutoCheckin,setDidAutoCheckin]=useState(false);
-
   useEffect(()=>{
     const d=loadData();
     setAppData(d);
@@ -218,21 +213,6 @@ export default function App() {
     }
   },[]);
 
-  // Silent GPS check-in on app open (and via ?checkin=1 from an iOS Shortcut).
-  // A Service Worker can't read GPS, so this is the closest thing to automatic:
-  // opening the app while at work marks the day for you.
-  useEffect(()=>{
-    if(didAutoCheckin||!appData?.setup?.workLocation) return;
-    setDidAutoCheckin(true);
-    const forced=new URLSearchParams(window.location.search).has("checkin");
-    if(appData.lastAutoCheckin===todayISO&&!forced) return;
-    checkInNow(!forced);
-    if(forced){
-      const u=new URL(window.location.href);
-      u.searchParams.delete("checkin");
-      window.history.replaceState({},"",u);
-    }
-  },[appData,didAutoCheckin,todayISO]);
 
   // Register Service Worker
   useEffect(()=>{
@@ -379,40 +359,6 @@ export default function App() {
 
   function skipWeeklyCheckin(){
     persistWith(prev=>prev?{...prev,lastWeekLogged:weekKeyOf(today)}:prev);
-  }
-
-  // ── GPS ──────────────────────────────────────────────────────────────
-  function saveWorkLocation(){
-    if(!navigator.geolocation){ showToast("הדפדפן לא תומך במיקום",cl.red); return; }
-    showToast("קורא מיקום…",cl.blue);
-    navigator.geolocation.getCurrentPosition(
-      pos=>{
-        persistWith(prev=>prev?{...prev,setup:{...prev.setup,
-          workLocation:{lat:pos.coords.latitude,lng:pos.coords.longitude,radius:400}}}:prev);
-        showToast("מיקום העבודה נשמר ✓");
-      },
-      ()=>showToast("לא ניתנה הרשאת מיקום",cl.red),
-      {enableHighAccuracy:true,timeout:12000,maximumAge:0}
-    );
-  }
-
-  function checkInNow(silent=false){
-    const wl=appData?.setup?.workLocation;
-    if(!wl||!navigator.geolocation) return;
-    navigator.geolocation.getCurrentPosition(
-      pos=>{
-        const dist=distanceM(pos.coords.latitude,pos.coords.longitude,wl.lat,wl.lng);
-        if(dist<=(wl.radius||400)){
-          setDayState(today.getFullYear(),today.getMonth(),today.getDate(),"work");
-          persistWith(prev=>prev?{...prev,lastAutoCheckin:todayISO}:prev);
-          showToast("זוהית בעבודה — היום סומן ✓");
-        }else if(!silent){
-          showToast(`אתה ${dist>1500?`${(dist/1000).toFixed(1)} ק״מ`:`${Math.round(dist)} מ׳`} מהעבודה`,cl.orange);
-        }
-      },
-      ()=>{ if(!silent) showToast("לא ניתן לקרוא מיקום",cl.red); },
-      {enableHighAccuracy:false,timeout:12000,maximumAge:120000}
-    );
   }
 
   // ── Backup / restore ─────────────────────────────────────────────────
@@ -700,7 +646,7 @@ export default function App() {
     <div style={S.page}>
       <div style={S.wrap}>
         <div style={{paddingBottom:"28px",marginBottom:"28px"}}>
-          <div style={{fontSize:"13px",fontWeight:600,color:cl.accent,letterSpacing:"2px",textTransform:"uppercase",marginBottom:"10px"}}>ברוך הבא</div>
+          <div style={{fontSize:"13px",fontWeight:600,color:cl.accent,marginBottom:"10px"}}>ברוך הבא</div>
           <div style={{...S.h1,fontSize:"32px"}}>🚗 8-400</div>
           <div style={{fontSize:"14px",color:cl.muted2,marginTop:"8px",lineHeight:"1.6"}}>ניהול חכם של ק״מ שנתי</div>
         </div>
@@ -723,7 +669,6 @@ export default function App() {
           <button className="btn-main" style={S.btn} onClick={handleSetup}>התחל מעקב ←</button>
         </div>
       </div>
-      <div style={{position:"fixed",bottom:0,left:0,right:0,textAlign:"center",fontSize:"9px",color:"rgba(240,238,248,0.2)",padding:"5px 0 7px",background:cl.bg,borderTop:`1px solid ${cl.border}`}}>made by illouzman</div>
     </div>
   );
 
@@ -743,18 +688,18 @@ export default function App() {
 
     return(
       <div>
-        {/* מקרא */}
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"6px",marginBottom:"14px"}}>
+        {/* Legend — one quiet row, not three competing cards */}
+        <div style={{display:"flex",justifyContent:"center",gap:"16px",marginBottom:"16px",flexWrap:"wrap"}}>
           {Object.entries(STATE_CFG).map(([k,c])=>(
-            <div key={k} style={{background:c.bg,border:`1px solid ${c.border}`,borderRadius:"10px",padding:"8px 6px",textAlign:"center"}}>
-              <div style={{fontSize:"16px",marginBottom:"2px"}}>{c.icon}</div>
-              <div style={{fontSize:"11px",fontWeight:700,color:c.color}}>{c.label}</div>
+            <div key={k} style={{display:"flex",alignItems:"center",gap:"5px"}}>
+              <span style={{fontSize:"13px"}}>{c.icon}</span>
+              <span style={{fontSize:"12px",fontWeight:600,color:cl.muted2}}>{c.label}</span>
             </div>
           ))}
         </div>
 
-        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:"2px",marginBottom:"6px"}}>
-          {DAY_HE.map(h=><div key={h} style={{textAlign:"center",fontSize:"11px",color:cl.muted,padding:"3px 0",fontWeight:600}}>{h}</div>)}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:"3px",marginBottom:"7px"}}>
+          {DAY_HE.map(h=><div key={h} style={{textAlign:"center",fontSize:"11.5px",color:cl.muted,padding:"2px 0",fontWeight:700}}>{h}</div>)}
         </div>
 
         <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:"3px"}}>
@@ -791,40 +736,55 @@ export default function App() {
   function renderBarChart(){
     if(!annual) return null;
     const chartH=90;
-    const yMax=Math.ceil((annual.maxPersonal||annual.allowance||100)/100)*100;
+    // The scale must cover the allowance too, or its marker lands outside the chart
+    const yMax=Math.max(100,Math.ceil(Math.max(annual.maxPersonal||0,annual.allowance||0)/100)*100);
     const ticks=[0,Math.round(yMax/2),yMax];
     const barGrad=(p)=>p>annual.allowance*1.2?"linear-gradient(180deg,#f87171,#fca5a5)":p>annual.allowance?"linear-gradient(180deg,#fb923c,#fcd34d)":"linear-gradient(180deg,#a78bfa,#34d399)";
-    const allowanceLineY=annual.allowance>0?Math.round((annual.allowance/yMax)*chartH):null;
+    const allowanceLineY=annual.allowance>0
+      ? Math.min(chartH,Math.round((annual.allowance/yMax)*chartH))
+      : null;
+    const gridC=isDark?"rgba(255,255,255,0.07)":"rgba(0,0,0,0.07)";
     return(
-      <div style={{display:"flex",gap:"4px",paddingTop:"6px"}}>
+      <div style={{display:"flex",gap:"7px",paddingTop:"4px"}}>
         {/* Y axis */}
-        <div style={{display:"flex",flexDirection:"column",justifyContent:"space-between",height:`${chartH+14}px`,paddingBottom:"14px",flexShrink:0,width:"28px"}}>
+        <div style={{display:"flex",flexDirection:"column",justifyContent:"space-between",
+          height:`${chartH+16}px`,paddingBottom:"16px",flexShrink:0,width:"26px"}}>
           {ticks.slice().reverse().map(t=>(
-            <div key={t} style={{fontSize:"8px",color:cl.muted,lineHeight:1,textAlign:"left"}}>{t>=1000?`${(t/1000).toFixed(1)}k`:t}</div>
+            <div key={t} style={{fontSize:"9.5px",color:cl.muted,lineHeight:1,textAlign:"left",fontWeight:600}}>
+              {t>=1000?`${(t/1000).toFixed(1)}k`:t}
+            </div>
           ))}
         </div>
-        {/* bars + allowance line */}
+        {/* bars, gridlines and the allowance marker */}
         <div style={{flex:1,position:"relative"}}>
+          {ticks.map(t=>(
+            <div key={t} style={{position:"absolute",left:0,right:0,
+              bottom:`${16+Math.round((t/yMax)*chartH)}px`,borderTop:`1px solid ${gridC}`,pointerEvents:"none"}}/>
+          ))}
           {allowanceLineY!=null&&(
-            <div style={{position:"absolute",left:0,right:0,bottom:`${14+allowanceLineY}px`,borderTop:"1px dashed rgba(167,139,250,0.45)",zIndex:1,pointerEvents:"none"}}/>
+            <div style={{position:"absolute",left:0,right:0,bottom:`${16+allowanceLineY}px`,
+              borderTop:`1.5px dashed ${cl.accent}99`,zIndex:1,pointerEvents:"none"}}>
+              <span style={{position:"absolute",right:0,top:"-15px",fontSize:"9.5px",fontWeight:700,
+                color:cl.accent,background:cl.surface,padding:"0 4px",borderRadius:"3px"}}>מכסה</span>
+            </div>
           )}
-          <div style={{display:"flex",alignItems:"flex-end",gap:"3px",height:`${chartH+14}px`,paddingBottom:"14px"}}>
+          <div style={{display:"flex",alignItems:"flex-end",gap:"4px",height:`${chartH+16}px`,paddingBottom:"16px",position:"relative",zIndex:2}}>
             {annual.months.map(({year,month,key},i)=>{
               const s=annual.byMonth[key];
               const isFuture=key>todayKey;
               const isCurr=key===todayKey;
-              const barH=s?Math.max(3,Math.round((s.personal/yMax)*chartH)):0;
+              const barH=s?Math.max(4,Math.round((s.personal/yMax)*chartH)):0;
               return(
                 <div key={key} className="month-pill" onClick={()=>openUpdate(year,month)}
-                  style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:"2px",cursor:"pointer"}}>
+                  style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:"4px",cursor:"pointer"}}>
                   <div className={s&&!isFuture?"bar-seg":undefined}
-                    style={{width:"100%",height:`${barH||2}px`,
-                      background:isFuture?(isDark?"rgba(255,255,255,0.04)":"rgba(0,0,0,0.06)"):s?barGrad(s.personal):(isDark?"rgba(255,255,255,0.07)":"rgba(0,0,0,0.07)"),
-                      borderRadius:"3px 3px 0 0",
-                      outline:isCurr?`2px solid ${cl.accent}`:"none",
-                      opacity:isFuture?0.35:1,
+                    style={{width:"100%",height:`${barH||3}px`,
+                      background:isFuture?gridC:s?barGrad(s.personal):gridC,
+                      borderRadius:"4px 4px 2px 2px",
+                      boxShadow:isCurr?`0 0 0 1.5px ${cl.accent}`:"none",
+                      opacity:isFuture?0.5:1,
                       animationDelay:`${i*0.04}s`}}/>
-                  <div style={{fontSize:"8px",color:isCurr?cl.accent:cl.muted,fontWeight:isCurr?700:"normal"}}>
+                  <div style={{fontSize:"9px",color:isCurr?cl.accent:cl.muted,fontWeight:isCurr?800:600}}>
                     {MONTH_HE[month].slice(0,3)}
                   </div>
                 </div>
@@ -839,14 +799,14 @@ export default function App() {
   return(
     <div style={S.page}>
       <div style={S.wrap}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",paddingBottom:"20px",marginBottom:"20px",borderBottom:`1px solid ${cl.border}`}}>
-          <div>
-            <div style={{fontSize:"10px",fontWeight:700,color:cl.accent,letterSpacing:"2px",textTransform:"uppercase",marginBottom:"4px"}}>ניהול חכם של ק״מ שנתי</div>
-            <div style={{...S.h1,fontSize:"26px"}}>🚗 8-400</div>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"18px"}}>
+          <div style={{display:"flex",alignItems:"center",gap:"9px"}}>
+            <span style={{fontSize:"25px",lineHeight:1}}>🚗</span>
+            <div style={{...S.h1,fontSize:"24px",letterSpacing:"-0.5px"}}>8-400</div>
           </div>
-          <div style={{display:"flex",gap:"8px"}}>
-            <button style={S.btnGhost} className="btn-ghost" onClick={()=>setShowAbout(true)}>ℹ️</button>
-            <button style={S.btnGhost} className="btn-ghost" onClick={()=>{
+          <div style={{display:"flex",gap:"7px"}}>
+            <button style={{...S.btnGhost,padding:"9px 12px",fontSize:"15px"}} className="btn-ghost" onClick={()=>setShowAbout(true)}>ℹ️</button>
+            <button style={{...S.btnGhost,padding:"9px 12px",fontSize:"15px"}} className="btn-ghost" onClick={()=>{
               setSettingsForm({commute:String(appData.setup.commute),yearlyBudget:String(appData.setup.yearlyBudget||DEFAULT_BUDGET)});
               setShowSettings(true);
             }}>⚙️</button>
@@ -909,37 +869,42 @@ export default function App() {
                   <div style={{fontSize:"30px",lineHeight:1}}>{verdict.icon}</div>
                 </div>
               </div>
-              <div style={{fontSize:"19px",fontWeight:800,color:verdict.color,marginTop:"14px"}}>{verdict.title}</div>
-              <div style={{fontSize:"14px",color:cl.muted2,marginTop:"8px",lineHeight:"1.6"}}>{verdict.line}</div>
+              <div style={{fontSize:"21px",fontWeight:800,color:verdict.color,marginTop:"16px"}}>{verdict.title}</div>
+              <div style={{fontSize:"14.5px",color:cl.muted2,marginTop:"7px",lineHeight:"1.65",
+                maxWidth:"290px",marginInline:"auto"}}>{verdict.line}</div>
             </div>
 
             {/* This month, in the terms people actually think in */}
             <div className="km-card" style={S.card}>
               <div style={S.sectionTitle}>מה מותר לי החודש</div>
-              <div style={{display:"flex",alignItems:"baseline",gap:"8px"}}>
-                <div className="stat-num" style={{fontSize:"42px",fontWeight:800,lineHeight:1,color:cl.text}}>
-                  {annual.allowance.toLocaleString()}
+              <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between"}}>
+                <div style={{display:"flex",alignItems:"baseline",gap:"7px"}}>
+                  <div className="stat-num" style={{fontSize:"44px",fontWeight:800,lineHeight:1,
+                    color:cl.text,letterSpacing:"-1.5px"}}>{annual.allowance.toLocaleString()}</div>
+                  <div style={{fontSize:"15px",color:cl.muted,fontWeight:600}}>ק"מ</div>
                 </div>
-                <div style={{fontSize:"14px",color:cl.muted}}>ק"מ</div>
+                <span style={S.badge(cl.blue,cl.blueBg)}>≈ {annual.perDay.toLocaleString()} ליום</span>
               </div>
-              <div style={{marginTop:"14px",paddingTop:"14px",borderTop:`1px solid ${cl.border}`,
-                display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <span style={{fontSize:"13px",color:cl.muted2}}>נשארו {annual.daysLeftInMonth} ימים</span>
-                <span style={S.badge(cl.blue,cl.blueBg)}>≈ {annual.perDay.toLocaleString()} ק״מ ליום</span>
+              <div style={{fontSize:"12.5px",color:cl.muted,marginTop:"10px"}}>
+                נשארו {annual.daysLeftInMonth} ימים בחודש
               </div>
             </div>
 
             {/* Chart doubles as the year timeline — tap a bar to edit that month */}
             <div className="km-card" style={S.card}>
-              <div style={S.sectionTitle}>לפי חודש · לחץ לעריכה</div>
+              <div style={{...S.sectionTitle,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <span>ק״מ פרטי לפי חודש</span>
+                <span style={{fontSize:"11.5px",fontWeight:500,color:cl.muted}}>לחץ לעריכה</span>
+              </div>
               {renderBarChart()}
             </div>
 
             {/* Everything else lives behind one toggle */}
             <button className="btn-ghost" onClick={()=>setShowDetails(v=>!v)}
-              style={{width:"100%",padding:"13px",borderRadius:"14px",border:`1px solid ${cl.border}`,
-                background:"transparent",color:cl.muted2,fontSize:"13px",cursor:"pointer",fontFamily:"inherit"}}>
-              {showDetails?"▲ הסתר פרטים":"▼ פרטים נוספים"}
+              style={{width:"100%",padding:"14px",borderRadius:"14px",border:`1px solid ${cl.border}`,
+                background:"transparent",color:cl.muted2,fontSize:"13.5px",fontWeight:600,
+                cursor:"pointer",fontFamily:FONT}}>
+              {showDetails?"הסתר פרטים ▲":"פרטים נוספים ▼"}
             </button>
 
             {showDetails && (
@@ -977,7 +942,7 @@ export default function App() {
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"18px"}}>
               <button style={S.btnGhost} className="btn-ghost" onClick={()=>navigateMonth(-1)}>→</button>
               <div style={{textAlign:"center"}}>
-                <div style={{fontSize:"11px",fontWeight:700,color:cl.accent,letterSpacing:"1.5px",textTransform:"uppercase"}}>{uf.year}</div>
+                <div style={{fontSize:"11px",fontWeight:700,color:cl.accent,}}>{uf.year}</div>
                 <div style={{fontSize:"18px",fontWeight:800,color:cl.text,marginTop:"2px"}}>{MONTH_HE[uf.month]}</div>
               </div>
               <button style={S.btnGhost} className="btn-ghost" onClick={()=>navigateMonth(1)}>←</button>
@@ -1019,14 +984,6 @@ export default function App() {
                 : "ברירת המחדל: א׳–ה׳ עבודה, שישי־שבת וחגים חופש."}
             </p>
 
-            {appData?.setup?.workLocation && mKey(uf.year,uf.month)===todayKey && (
-              <button className="btn-ghost" onClick={()=>checkInNow(false)}
-                style={{width:"100%",marginTop:"10px",padding:"13px",borderRadius:"12px",
-                  border:`1px solid ${cl.border}`,background:cl.accentBg,color:cl.accent,
-                  fontSize:"13px",fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
-                📍 אני בעבודה עכשיו — סמן את היום
-              </button>
-            )}
 
             <button className="btn-ghost" onClick={()=>setShowCalendar(v=>!v)}
               style={{width:"100%",marginTop:"14px",padding:"12px",borderRadius:"12px",
@@ -1040,17 +997,17 @@ export default function App() {
             {livePreview && (
               <div style={{marginTop:"16px",padding:"16px",background:cl.surface2,borderRadius:"14px",display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"8px",border:`1px solid ${cl.border}`}}>
                 <div style={{textAlign:"center"}}>
-                  <div style={{fontSize:"11px",color:cl.muted,marginBottom:"4px",textTransform:"uppercase",letterSpacing:"0.8px"}}>סה"כ</div>
+                  <div style={{fontSize:"11px",color:cl.muted,marginBottom:"4px",}}>סה"כ</div>
                   <div style={{fontSize:"20px",fontWeight:800,color:cl.text}}>{livePreview.totalKm}</div>
                   <div style={{fontSize:"10px",color:cl.muted}}>ק"מ</div>
                 </div>
                 <div style={{textAlign:"center",borderRight:`1px solid ${cl.border}`,borderLeft:`1px solid ${cl.border}`}}>
-                  <div style={{fontSize:"11px",color:cl.muted,marginBottom:"4px",textTransform:"uppercase",letterSpacing:"0.8px"}}>עבודה</div>
+                  <div style={{fontSize:"11px",color:cl.muted,marginBottom:"4px",}}>עבודה</div>
                   <div style={{fontSize:"20px",fontWeight:800,color:cl.blue}}>{livePreview.workKm}</div>
                   <div style={{fontSize:"10px",color:cl.muted}}>ק"מ</div>
                 </div>
                 <div style={{textAlign:"center"}}>
-                  <div style={{fontSize:"11px",color:cl.muted,marginBottom:"4px",textTransform:"uppercase",letterSpacing:"0.8px"}}>פרטי</div>
+                  <div style={{fontSize:"11px",color:cl.muted,marginBottom:"4px",}}>פרטי</div>
                   <div style={{fontSize:"20px",fontWeight:800,color:annual&&livePreview.personal>annual.allowance?cl.orange:cl.green}}>{livePreview.personal}</div>
                   <div style={{fontSize:"10px",color:cl.muted}}>ק"מ</div>
                 </div>
@@ -1128,31 +1085,6 @@ export default function App() {
             {"Notification" in window && Notification.permission==="granted" && (
               <div style={{marginTop:"10px",fontSize:"12px",color:cl.green,textAlign:"center",fontWeight:600}}>✓ התראות פוש מופעלות</div>
             )}
-            {/* GPS work location */}
-            <div style={{marginTop:"22px",paddingTop:"18px",borderTop:`1px solid ${cl.border}`}}>
-              <div style={{...S.sectionTitle,marginBottom:"6px"}}>זיהוי אוטומטי לפי מיקום</div>
-              <div style={{fontSize:"12px",color:cl.muted,lineHeight:"1.6",marginBottom:"12px"}}>
-                {appData?.setup?.workLocation
-                  ? "מיקום העבודה שמור. כל פתיחה של האפליקציה בזמן שאתה בעבודה תסמן את היום אוטומטית."
-                  : "שמור את מיקום העבודה (בזמן שאתה שם) — ואז כל פתיחה של האפליקציה בעבודה תסמן את היום לבד."}
-              </div>
-              <button className="btn-ghost"
-                style={{width:"100%",padding:"13px",borderRadius:"12px",
-                  border:`1px solid ${appData?.setup?.workLocation?cl.green+"55":cl.border}`,
-                  background:appData?.setup?.workLocation?cl.greenBg:"transparent",
-                  color:appData?.setup?.workLocation?cl.green:cl.muted2,
-                  fontSize:"13px",fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}
-                onClick={saveWorkLocation}>
-                {appData?.setup?.workLocation?"📍 עדכן את מיקום העבודה":"📍 שמור את מיקום העבודה"}
-              </button>
-              {appData?.setup?.workLocation && (
-                <p style={{fontSize:"11px",color:cl.muted,marginTop:"10px",lineHeight:"1.6"}}>
-                  💡 ב-iOS אפשר ליצור קיצור דרך: אוטומציה ← "בהגעה למיקום" ← פתח כתובת אתר עם
-                  <code style={{background:cl.surface2,padding:"1px 5px",borderRadius:"4px",margin:"0 3px"}}>?checkin=1</code>
-                  והיום יסומן לבד.
-                </p>
-              )}
-            </div>
 
             {/* Backup / restore */}
             <div style={{marginTop:"22px",paddingTop:"18px",borderTop:`1px solid ${cl.border}`}}>
@@ -1194,17 +1126,6 @@ export default function App() {
             </div>
             <div style={{fontSize:"13px",color:cl.muted2,lineHeight:"1.7",marginBottom:"20px"}}>
               אפליקציה למעקב ק״מ פרטי לאורך השנה — חישוב אוטומטי של ק״מ עבודה מול פרטי, ניהול תקציב שנתי ולוח שנה חכם לסימון ימי עבודה.
-            </div>
-            <div style={{marginBottom:"20px"}}>
-              <div style={{fontSize:"10px",fontWeight:700,color:cl.muted,textTransform:"uppercase",letterSpacing:"1.5px",marginBottom:"10px"}}>האפליקציות שלי</div>
-              <a href="https://thelazyluz-dev.github.io/shaati/" target="_blank" rel="noopener noreferrer"
-                style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px",background:cl.surface2,borderRadius:"12px",border:`1px solid ${cl.border}`,textDecoration:"none",cursor:"pointer"}}>
-                <div>
-                  <div style={{fontSize:"14px",fontWeight:700,color:cl.text}}>⏱ שעתי</div>
-                  <div style={{fontSize:"11px",color:cl.muted,marginTop:"2px"}}>מעקב שעות עבודה</div>
-                </div>
-                <div style={{fontSize:"16px",color:cl.accent}}>←</div>
-              </a>
             </div>
             <div style={{textAlign:"center",fontSize:"11px",color:cl.muted,marginBottom:"16px"}}>made by illouzman</div>
             <button style={{...S.btnGhost,width:"100%",display:"flex",justifyContent:"center",padding:"12px"}}
@@ -1259,7 +1180,6 @@ export default function App() {
       })()}
 
       {toast && <div className="toast-anim" style={{position:"fixed",bottom:28,left:"50%",transform:"translateX(-50%)",background:toast.color,color:"#fff",padding:"11px 24px",borderRadius:"28px",fontSize:"14px",fontWeight:700,boxShadow:`0 8px 32px ${toast.color}66`,whiteSpace:"nowrap"}}>{toast.msg}</div>}
-      <div style={{position:"fixed",bottom:0,left:0,right:0,textAlign:"center",fontSize:"9px",color:"rgba(240,238,248,0.2)",padding:"5px 0 7px",background:cl.bg,borderTop:`1px solid ${cl.border}`}}>made by illouzman</div>
     </div>
   );
 }

@@ -735,24 +735,33 @@ export default function App() {
             const state=getEffectiveState(iso,year,month,d,uf.dayOverrides);
             const cfg=STATE_CFG[state];
             const holiday=HOLIDAYS[iso];
-            const isToday=iso===toISO(new Date().getFullYear(),new Date().getMonth(),new Date().getDate());
+            const isToday=iso===todayISO;
+            // Days that haven't happened aren't counted, so they mustn't look
+            // like they were — otherwise the calendar contradicts the counter.
+            const isFuture=iso>todayISO;
 
             return(
               <div key={i} className="day-cell" onClick={()=>openDayModal(iso,year,month,d)}
-                style={{textAlign:"center",padding:"4px 2px",borderRadius:"8px",background:cfg.bg,
-                  border:`1px solid ${isToday?cl.accent:cfg.border}`,
-                  color:cfg.color,cursor:"pointer",height:"44px",overflow:"hidden",
-                  display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:"1px"}}>
-                <span style={{fontSize:"13px",fontWeight:700,lineHeight:1}}>{d}</span>
-                {holiday
-                    ? <span style={{fontSize:"6px",fontWeight:700,lineHeight:"1.1",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",paddingInline:"2px",opacity:0.9}}>{holiday}</span>
-                  : <span style={{fontSize:"10px",lineHeight:1}}>{cfg.icon}</span>
+                style={{textAlign:"center",padding:"4px 2px",borderRadius:"8px",
+                  background:isFuture?"transparent":cfg.bg,
+                  opacity:isFuture?0.4:1,
+                  border:`1px solid ${isToday?cl.accent:isFuture?cl.border:cfg.border}`,
+                  color:isFuture?cl.muted:cfg.color,cursor:"pointer",height:"46px",overflow:"hidden",
+                  display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:"2px"}}>
+                <span style={{fontSize:"13.5px",fontWeight:isToday?800:700,lineHeight:1}}>{d}</span>
+                {isFuture
+                  ? <span style={{fontSize:"9px",lineHeight:1,opacity:0.5}}>·</span>
+                  : holiday
+                    ? <span style={{fontSize:"7px",fontWeight:700,lineHeight:"1.1",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",paddingInline:"2px"}}>{holiday}</span>
+                    : <span style={{fontSize:"10.5px",lineHeight:1}}>{cfg.icon}</span>
                 }
               </div>
             );
           })}
         </div>
-        <p style={{fontSize:"11px",color:cl.muted,margin:"10px 0 0",textAlign:"center"}}>לחץ על יום כדי לשנות את הסטטוס שלו</p>
+        <p style={{fontSize:"11.5px",color:cl.muted,margin:"12px 0 0",textAlign:"center"}}>
+          לחץ על יום כדי לשנות את הסטטוס שלו
+        </p>
       </div>
     );
   }

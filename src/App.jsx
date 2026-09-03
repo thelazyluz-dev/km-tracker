@@ -33,17 +33,23 @@ function getDefaultState(iso,y,m,d){
 }
 function getEffectiveState(iso,y,m,d,ov){ return ov?.[iso]??getDefaultState(iso,y,m,d); }
 
-// `upTo` caps counting at a day of the month — the month in progress has no
-// commutes yet for days that haven't happened.
-function countWorkdays(y,m,ov={},upTo){
-  const last=Math.min(upTo??daysInMonth(y,m),daysInMonth(y,m));
+// Counting is bounded on both sides: `from` for the month tracking started in
+// (days before you owned the app were never measured) and `to` for the month in
+// progress (days that haven't happened have no commute yet).
+function countWorkdays(y,m,ov={},to,from){
+  const last=Math.min(to??daysInMonth(y,m),daysInMonth(y,m));
+  const first=Math.max(from??1,1);
   let n=0;
-  for(let d=1;d<=last;d++){
+  for(let d=first;d<=last;d++){
     const iso=toISO(y,m,d);
     if(getEffectiveState(iso,y,m,d,ov)==="work") n++;
   }
   return n;
 }
+
+// Tracking begins the day the app was set up, which is not necessarily the day
+// the km-year began. Old data has no trackFrom — it started at yearStart.
+function trackFromOf(setup){ return setup?.trackFrom || setup?.yearStart; }
 
 function migrateEntry(e){
   if(!e) return e;
@@ -160,6 +166,16 @@ function RingProgress({pct,color,trackColor}){
 }
 
 const REMINDER_KEY = "km_reminder_dismissed";
+const INSTALL_KEY  = "km_install_dismissed";
+const WEEK_MS      = 7*24*60*60*1000;
+
+function isInstalled(){
+  try{
+    return window.matchMedia("(display-mode: standalone)").matches
+        || window.navigator.standalone === true;   // iOS Safari
+  }catch{ return false; }
+}
+const isIOS = ()=>/iphone|ipad|ipod/i.test(navigator.userAgent);
 
 export default function App() {
   // Stable for the session — a fresh `new Date()` each render would make every
@@ -188,11 +204,52 @@ export default function App() {
   const [reminderDismissed, setReminderDismissed] = useState(()=>{
     try{ return localStorage.getItem(REMINDER_KEY)||""; }catch{ return ""; }
   });
+  // ── Install prompt: offered at most once a week, never once installed ──
+  const [installEvt, setInstallEvt] = useState(null);
+  const [showInstall, setShowInstall] = useState(false);
+  useEffect(()=>{
+    if(isInstalled()) return;
+    let last=0;
+    try{ last=Number(localStorage.getItem(INSTALL_KEY))||0; }catch{}
+    if(Date.now()-last < WEEK_MS) return;
+    // Chrome hands us a deferred prompt; iOS never does, so show instructions.
+    const onPrompt=(e)=>{ e.preventDefault(); setInstallEvt(e); setShowInstall(true); };
+    window.addEventListener("beforeinstallprompt",onPrompt);
+    const t=setTimeout(()=>{ if(isIOS()) setShowInstall(true); },1200);
+    const onInstalled=()=>{ setShowInstall(false); setInstallEvt(null); };
+    window.addEventListener("appinstalled",onInstalled);
+    return ()=>{ window.removeEventListener("beforeinstallprompt",onPrompt);
+                 window.removeEventListener("appinstalled",onInstalled); clearTimeout(t); };
+  },[]);
+
+  function dismissInstall(){
+    try{ localStorage.setItem(INSTALL_KEY,String(Date.now())); }catch{}
+    setShowInstall(false);
+  }
+  async function doInstall(){
+    if(!installEvt) return;
+    installEvt.prompt();
+    try{ await installEvt.userChoice; }catch{}
+    setInstallEvt(null); dismissInstall();
+  }
+
   const [showSettings, setShowSettings] = useState(false);
   const [showAbout,    setShowAbout]    = useState(false);
   const [settingsForm, setSettingsForm] = useState({commute:"",yearlyBudget:""});
 
-  const [sf, setSf] = useState({yearStart:`${today.getFullYear()}-01-01`,startOdo:"",commute:"62",yearlyBudget:String(DEFAULT_BUDGET)});
+  const [sf, setSf] = useState({yearStart:`${today.getFullYear()}-01-01`,startOdo:"",commute:"62",
+                                yearlyBudget:String(DEFAULT_BUDGET),mode:"today",priorPersonal:""});
+
+  // Joining after the km-year already began needs different questions
+  const midYear = useMemo(()=>{
+    if(!sf.yearStart) return false;
+    return sf.yearStart.slice(0,7) < todayKey;
+  },[sf.yearStart,todayKey]);
+  const monthsSinceStart = useMemo(()=>{
+    if(!midYear) return 0;
+    const [y,m]=sf.yearStart.split("-").map(Number);
+    return (today.getFullYear()-y)*12+(today.getMonth()-(m-1));
+  },[midYear,sf.yearStart,today]);
 
   const [uf, setUf] = useState({year:today.getFullYear(),month:today.getMonth(),odometer:"",dayOverrides:{}});
   const TAB_ORDER=["dashboard","update","history"];
@@ -448,12 +505,19 @@ export default function App() {
   // Returns the last recorded odometer before this month, plus any months that
   // were skipped since then — their km are folded into this month's total, so
   // their workdays must be counted too or personal km get wildly inflated.
+  // Month tracking began in, and the day within it
+  const trackFrom    = trackFromOf(appData?.setup);
+  const trackFromKey = trackFrom ? trackFrom.slice(0,7) : null;
+  const trackFromDay = trackFrom ? Number(trackFrom.slice(8,10)) : 1;
+
   const getPrevInfo = useCallback((year,month)=>{
     if(!appData?.setup) return {odo:0,gapMonths:[]};
+    const tk=trackFromOf(appData.setup).slice(0,7);
     const months=getYearMonths(appData.setup.yearStart);
     let prev=appData.setup.startOdometer, gap=[];
     for(const m of months){
       if(m.year===year&&m.month===month) break;
+      if(m.key<tk) continue;                       // before the app existed
       if(appData.months?.[m.key]?.odometer){ prev=appData.months[m.key].odometer; gap=[]; }
       else gap.push(m);
     }
@@ -469,15 +533,20 @@ export default function App() {
     mKey(year,month)===todayKey ? today.getDate() : undefined
   ,[todayKey,today]);
 
+  // First counted day: the month tracking started in begins mid-month
+  const floorFor = useCallback((year,month)=>
+    mKey(year,month)===trackFromKey ? trackFromDay : undefined
+  ,[trackFromKey,trackFromDay]);
+
   // Workdays for a month, plus those of any skipped months folded into it
   const workDaysFor = useCallback((year,month,overrides,gapMonths)=>{
-    let n=countWorkdays(year,month,overrides||{},capFor(year,month));
+    let n=countWorkdays(year,month,overrides||{},capFor(year,month),floorFor(year,month));
     for(const g of (gapMonths||[])){
       const ge=migrateEntry(appData?.months?.[g.key]);
-      n+=countWorkdays(g.year,g.month,ge?.dayOverrides||{},capFor(g.year,g.month));
+      n+=countWorkdays(g.year,g.month,ge?.dayOverrides||{},capFor(g.year,g.month),floorFor(g.year,g.month));
     }
     return n;
-  },[appData,capFor]);
+  },[appData,capFor,floorFor]);
 
   const calcMonth = useCallback((year,month)=>{
     const mk=mKey(year,month);
@@ -496,9 +565,14 @@ export default function App() {
   const annual=useMemo(()=>{
     if(!appData?.setup) return null;
     const months=getYearMonths(appData.setup.yearStart);
-    let totalPersonal=0;
+    const tk=trackFromOf(appData.setup).slice(0,7);
+    // Km already spent this cycle before the app was installed. Zero for anyone
+    // who started at the beginning of their km-year.
+    const priorPersonal=Math.max(0,Number(appData.setup.priorPersonal)||0);
+    let totalPersonal=priorPersonal;
     const byMonth={};
     for(const {year,month,key} of months){
+      if(key<tk) continue;                         // no data for these
       const s=calcMonth(year,month);
       if(s){totalPersonal+=s.personal;byMonth[key]=s;}
     }
@@ -509,10 +583,13 @@ export default function App() {
     const pct=Math.min(100,Math.round(totalPersonal/budget*100));
     const maxPersonal=Math.max(1,...Object.values(byMonth).map(s=>s.personal));
 
-    // Forecast: extrapolate the average of recorded months over the whole year
+    // Forecast: project the tracked months' average across the months that are
+    // actually being tracked, then add what was already spent before setup.
     const recorded=Object.values(byMonth);
-    const avg=recorded.length?totalPersonal/recorded.length:0;
-    const projected=Math.round(avg*12);
+    const trackedTotal=totalPersonal-priorPersonal;
+    const avg=recorded.length?trackedTotal/recorded.length:0;
+    const trackedMonths=months.filter(m=>m.key>=tk).length;
+    const projected=Math.round(priorPersonal+avg*trackedMonths);
     const overBy=projected-budget;
 
     // Year boundary: has the tracked 12-month window finished?
@@ -531,7 +608,7 @@ export default function App() {
 
     return {totalPersonal,remaining,monthsLeft,allowance,pct,byMonth,months,budget,
             maxPersonal,projected,overBy,avg,yearEnded,lastKey,perDay,daysLeftInMonth,
-            precisionMatters,recordedCount:recorded.length,commute};
+            precisionMatters,recordedCount:recorded.length,commute,priorPersonal,trackedMonths};
   },[appData,todayKey,calcMonth,today]);
 
   // Workdays in the currently-edited month, counted only up to today when the
@@ -596,7 +673,15 @@ export default function App() {
   function handleSetup(){
     const odo=Number(sf.startOdo), c=Number(sf.commute), b=Number(sf.yearlyBudget)||DEFAULT_BUDGET;
     if(!sf.yearStart||!(odo>=0)||!(c>0)){ showToast("בדוק את הערכים שהזנת",cl.red); return; }
-    const d={setup:{yearStart:sf.yearStart,startOdometer:odo,commute:c,yearlyBudget:b},months:{}};
+    // "today" mode measures from now, so the odometer belongs to today, not to
+    // the start of the km-year, and anything already spent is carried in.
+    const startedToday = midYear && sf.mode==="today";
+    const d={setup:{
+      yearStart:sf.yearStart,
+      trackFrom: startedToday ? todayISO : sf.yearStart,
+      startOdometer:odo, commute:c, yearlyBudget:b,
+      priorPersonal: startedToday ? Math.max(0,Number(sf.priorPersonal)||0) : 0,
+    },months:{}};
     persist(d);
     setScreen("main");
     showToast("ההגדרות נשמרו ✓");
@@ -658,13 +743,15 @@ export default function App() {
       const y=d.getFullYear(),m=d.getMonth();
       // A month that hasn't happened has nothing to record, and letting the
       // stepper loose there writes overrides the counter can never show.
-      if(mKey(y,m)>todayKey) return prev;
+      const k=mKey(y,m);
+      if(k>todayKey||(trackFromKey&&k<trackFromKey)) return prev;
       const ex=migrateEntry(appData?.months?.[mKey(y,m)]);
       return {year:y,month:m,odometer:ex?.odometer?.toString()||"",dayOverrides:ex?.dayOverrides||{}};
     });
   }
 
   const atCurrentMonth = mKey(uf.year,uf.month)>=todayKey;
+  const atFirstMonth   = !!trackFromKey && mKey(uf.year,uf.month)<=trackFromKey;
 
   function doReset(){
     if(!window.confirm("לאפס את כל הנתונים ולהתחיל מחדש?")) return;
@@ -710,13 +797,66 @@ export default function App() {
         </div>
         <div style={S.card}>
           <div style={S.sectionTitle}>הגדרות ראשוניות</div>
-          <label style={{...S.label,marginTop:0,color:cl.muted2}}>תחילת שנת מדידה</label>
+
+          <label style={{...S.label,marginTop:0}}>מתי מתחדשת מכסת הק״מ שלך?</label>
           <input style={S.input} type="date" value={sf.yearStart} onChange={e=>setSf({...sf,yearStart:e.target.value})}/>
-          <label style={{...S.label,color:cl.muted2}}>קריאת מד ביום זה (ק"מ)</label>
-          <input style={S.input} type="number" placeholder="למשל: 45000" value={sf.startOdo} onChange={e=>setSf({...sf,startOdo:e.target.value})}/>
-          <label style={{...S.label,color:cl.muted2}}>הלוך-חזור לעבודה (ק"מ/יום)</label>
+          <p style={S.hint}>בדרך כלל 1 בינואר. זה החלון שהתקציב השנתי נספר בתוכו.</p>
+
+          {midYear ? (
+            <>
+              <div style={{...S.cardYellow,marginTop:"18px",marginBottom:"4px"}}>
+                <div style={{fontSize:"13.5px",fontWeight:700,color:cl.yellow,marginBottom:"6px"}}>
+                  אתה מצטרף באמצע השנה
+                </div>
+                <div style={{fontSize:"12.5px",color:cl.muted2,lineHeight:"1.7"}}>
+                  כבר נסעת {monthsSinceStart} חודשים מהמכסה הנוכחית. בחר איך להתחיל:
+                </div>
+              </div>
+
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px",marginTop:"14px"}}>
+                {[["known","יש לי הקריאה מתחילת השנה"],["today","אתחיל למדוד מהיום"]].map(([k,l])=>(
+                  <button key={k} onClick={()=>setSf({...sf,mode:k})}
+                    style={{padding:"14px 10px",borderRadius:"12px",cursor:"pointer",fontFamily:FONT,
+                      fontSize:"12.5px",fontWeight:700,lineHeight:"1.45",
+                      border:`2px solid ${sf.mode===k?cl.accent:"transparent"}`,
+                      background:sf.mode===k?cl.accentBg:cl.surface2,
+                      color:sf.mode===k?cl.accent:cl.muted2}}>{l}</button>
+                ))}
+              </div>
+
+              {sf.mode==="known" ? (
+                <>
+                  <label style={S.label}>קריאת המד ב-{sf.yearStart} (ק״מ)</label>
+                  <input style={S.input} type="number" placeholder="למשל: 45000"
+                    value={sf.startOdo} onChange={e=>setSf({...sf,startOdo:e.target.value})}/>
+                  <p style={S.hint}>הכי מדויק — כל השנה תחושב נכון מהיום הראשון.</p>
+                </>
+              ) : (
+                <>
+                  <label style={S.label}>קריאת המד היום (ק״מ)</label>
+                  <input style={S.input} type="number" placeholder="למשל: 53600"
+                    value={sf.startOdo} onChange={e=>setSf({...sf,startOdo:e.target.value})}/>
+                  <label style={S.label}>כמה ק״מ פרטי כבר ניצלת השנה?</label>
+                  <input style={S.input} type="number" placeholder="למשל: 3500 — אם לא ידוע, השאר ריק"
+                    value={sf.priorPersonal} onChange={e=>setSf({...sf,priorPersonal:e.target.value})}/>
+                  <p style={{...S.hint,color:cl.yellow}}>
+                    בלי המספר הזה המכסה החודשית תיראה גדולה ממה שבאמת נשאר לך.
+                    אפשר לקבל אותו מהליסינג או ממחלקת הרכב.
+                  </p>
+                </>
+              )}
+            </>
+          ) : (
+            <>
+              <label style={S.label}>קריאת המד בתאריך זה (ק״מ)</label>
+              <input style={S.input} type="number" placeholder="למשל: 45000"
+                value={sf.startOdo} onChange={e=>setSf({...sf,startOdo:e.target.value})}/>
+            </>
+          )}
+
+          <label style={S.label}>הלוך-חזור לעבודה (ק"מ ליום)</label>
           <input style={S.input} type="number" placeholder="למשל: 62" value={sf.commute} onChange={e=>setSf({...sf,commute:e.target.value})}/>
-          <label style={{...S.label,color:cl.muted2}}>תקציב ק"מ פרטי שנתי</label>
+          <label style={S.label}>תקציב ק"מ פרטי שנתי</label>
           <input style={S.input} type="number" placeholder="למשל: 8400" value={sf.yearlyBudget} onChange={e=>setSf({...sf,yearlyBudget:e.target.value})}/>
           <button className="btn-main" style={S.btn} onClick={handleSetup}>התחל מעקב ←</button>
         </div>
@@ -833,18 +973,22 @@ export default function App() {
               const s=annual.byMonth[key];
               const isFuture=key>todayKey;
               const isCurr=key===todayKey;
+              const preTrack=trackFromKey&&key<trackFromKey;
               const barH=s?Math.max(4,Math.round((s.personal/yMax)*chartH)):0;
               return(
-                <div key={key} className="month-pill" onClick={()=>openUpdate(year,month)}
-                  style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:"4px",cursor:"pointer"}}>
+                <div key={key} className={preTrack?undefined:"month-pill"}
+                  onClick={preTrack?undefined:()=>openUpdate(year,month)}
+                  style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:"4px",
+                    cursor:preTrack?"default":"pointer"}}>
                   <div className={s&&!isFuture?"bar-seg":undefined}
                     style={{width:"100%",height:`${barH||3}px`,
-                      background:isFuture?gridC:s?barGrad(s.personal):gridC,
+                      background:isFuture||preTrack?gridC:s?barGrad(s.personal):gridC,
                       borderRadius:"4px 4px 2px 2px",
                       boxShadow:isCurr?`0 0 0 1.5px ${cl.accent}`:"none",
-                      opacity:isFuture?0.5:1,
+                      opacity:isFuture?0.5:preTrack?0.28:1,
                       animationDelay:`${i*0.04}s`}}/>
-                  <div style={{fontSize:"9px",color:isCurr?cl.accent:cl.muted,fontWeight:isCurr?800:600}}>
+                  <div style={{fontSize:"9px",color:isCurr?cl.accent:cl.muted,
+                    fontWeight:isCurr?800:600,opacity:preTrack?0.45:1}}>
                     {MONTH_HE[month].slice(0,3)}
                   </div>
                 </div>
@@ -927,7 +1071,7 @@ export default function App() {
 
             {/* A new user has nothing to judge yet — say what to do instead of
                 showing a 0% ring with no explanation. */}
-            {annual.recordedCount===0 && (
+            {annual.recordedCount===0 && annual.priorPersonal===0 && (
               <div className="km-card" style={{...S.card,textAlign:"center",padding:"32px 24px",
                 background:`linear-gradient(160deg,${cl.accentBg} 0%,transparent 75%)`,
                 border:`1px solid ${cl.accent}33`}}>
@@ -943,7 +1087,7 @@ export default function App() {
             )}
 
             {/* The one answer: am I OK? */}
-            {annual.recordedCount>0 && (
+            {(annual.recordedCount>0||annual.priorPersonal>0) && (
             <div className="km-card" style={{...S.card,textAlign:"center",paddingTop:"28px",paddingBottom:"26px",
               background:`linear-gradient(160deg,${verdict.tint} 0%,transparent 75%)`,border:`1px solid ${verdict.color}33`}}>
               <div style={{position:"relative",width:"120px",margin:"0 auto"}}>
@@ -1024,7 +1168,9 @@ export default function App() {
         {tab==="update" && (
           <div className={tabAnim+" km-card"} style={S.card}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"18px"}}>
-              <button style={{...S.btnGhost,padding:"10px 16px",fontSize:"15px"}} className="btn-ghost" onClick={()=>navigateMonth(-1)}>→</button>
+              <button style={{...S.btnGhost,padding:"10px 16px",fontSize:"15px",
+                opacity:atFirstMonth?0.3:1,cursor:atFirstMonth?"default":"pointer"}}
+                className="btn-ghost" disabled={atFirstMonth} onClick={()=>navigateMonth(-1)}>→</button>
               <div style={{textAlign:"center"}}>
                 <div style={{fontSize:"12px",fontWeight:700,color:cl.muted}}>{uf.year}</div>
                 <div style={{fontSize:"19px",fontWeight:800,color:cl.text,marginTop:"1px"}}>{MONTH_HE[uf.month]}</div>
@@ -1395,6 +1541,35 @@ export default function App() {
           </div>
         );
       })()}
+
+      {showInstall && screen==="main" && (
+        <div className="install-banner" style={{position:"fixed",bottom:0,left:0,right:0,zIndex:90,
+          background:cl.surface,borderTop:`1px solid ${cl.border}`,padding:"16px 16px 20px",
+          direction:"rtl",boxShadow:"0 -8px 32px rgba(0,0,0,0.28)"}}>
+          <div style={{maxWidth:"430px",margin:"0 auto"}}>
+            <div style={{display:"flex",gap:"12px",alignItems:"flex-start"}}>
+              <span style={{fontSize:"26px",lineHeight:1}}>📲</span>
+              <div style={{flex:1}}>
+                <div style={{fontSize:"14.5px",fontWeight:700,color:cl.text,marginBottom:"3px"}}>
+                  התקן את 8-400 על המסך
+                </div>
+                <div style={{fontSize:"12.5px",color:cl.muted,lineHeight:"1.6"}}>
+                  {isIOS()
+                    ? <>לחץ על <strong style={{color:cl.muted2}}>שיתוף</strong> ואז <strong style={{color:cl.muted2}}>«הוסף למסך הבית»</strong>.</>
+                    : "נפתח כמו אפליקציה רגילה, ומאפשר תזכורות חודשיות."}
+                </div>
+              </div>
+              <button onClick={dismissInstall} aria-label="סגור"
+                style={{background:"none",border:"none",color:cl.muted,fontSize:"19px",
+                  cursor:"pointer",lineHeight:1,padding:"0 2px",fontFamily:FONT}}>✕</button>
+            </div>
+            {installEvt && (
+              <button className="btn-main" style={{...S.btn,marginTop:"13px",padding:"13px"}}
+                onClick={doInstall}>התקן עכשיו</button>
+            )}
+          </div>
+        </div>
+      )}
 
       {toast && <div className="toast-anim" style={{position:"fixed",bottom:28,left:"50%",transform:"translateX(-50%)",background:toast.color,color:"#fff",padding:"11px 24px",borderRadius:"28px",fontSize:"14px",fontWeight:700,boxShadow:`0 8px 32px ${toast.color}66`,whiteSpace:"nowrap"}}>{toast.msg}</div>}
     </div>

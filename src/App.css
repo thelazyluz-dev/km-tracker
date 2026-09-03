@@ -167,3 +167,12 @@ input[type=date]::-webkit-calendar-picker-indicator {
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(167,139,250,0.25); border-radius: 4px; }
+
+/* ── Install banner ── */
+@keyframes installIn { from { opacity:0; transform:translateY(100%); } to { opacity:1; transform:none; } }
+.install-banner {
+  animation: installIn 0.34s cubic-bezier(0.22,0.9,0.3,1) both;
+  animation-delay: 0.5s;
+  padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px)) !important;
+}
+@media (prefers-reduced-motion: reduce) { .install-banner { animation: none !important; } }

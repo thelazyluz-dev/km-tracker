@@ -51,6 +51,11 @@ function countWorkdays(y,m,ov={},to,from){
 // the km-year began. Old data has no trackFrom — it started at yearStart.
 function trackFromOf(setup){ return setup?.trackFrom || setup?.yearStart; }
 
+function startOfDay(){
+  const n=new Date();
+  return new Date(n.getFullYear(),n.getMonth(),n.getDate());
+}
+
 function migrateEntry(e){
   if(!e) return e;
   if(e.dayOverrides) return e;
@@ -212,11 +217,26 @@ function isInstalled(){
 const isIOS = ()=>/iphone|ipad|ipod/i.test(navigator.userAgent);
 
 export default function App() {
-  // Stable for the session — a fresh `new Date()` each render would make every
-  // memo that depends on it recompute on every keystroke.
-  const today = useMemo(()=>{
-    const n=new Date();
-    return new Date(n.getFullYear(),n.getMonth(),n.getDate());
+  // Stable across renders — a fresh `new Date()` each time would make every
+  // dependent memo recompute on every keystroke. But an installed PWA can sit
+  // open for days, so the date is refreshed whenever the user comes back to it;
+  // the same object is kept while the day is unchanged, preserving that memo
+  // stability.
+  const [today,setToday] = useState(startOfDay);
+  useEffect(()=>{
+    const check=()=>{
+      if(document.visibilityState==="hidden") return;
+      const now=startOfDay();
+      setToday(prev=>prev.getTime()===now.getTime()?prev:now);
+    };
+    document.addEventListener("visibilitychange",check);
+    window.addEventListener("focus",check);
+    const iv=setInterval(check,60000);          // also catches a tab left in the foreground
+    return ()=>{
+      document.removeEventListener("visibilitychange",check);
+      window.removeEventListener("focus",check);
+      clearInterval(iv);
+    };
   },[]);
   const todayISO = toISO(today.getFullYear(),today.getMonth(),today.getDate());
   const todayKey = mKey(today.getFullYear(),today.getMonth());
@@ -320,7 +340,8 @@ export default function App() {
     if(d?.setup && today.getDate()<=5){
       const pm=new Date(today.getFullYear(),today.getMonth()-1,1);
       const pk=mKey(pm.getFullYear(),pm.getMonth());
-      const inYear=getYearMonths(d.setup.yearStart).some(m=>m.key===pk);
+      const inYear=getYearMonths(d.setup.yearStart).some(m=>m.key===pk)
+                && pk>=trackFromOf(d.setup).slice(0,7);   // not before tracking began
       if(inYear && !d.months?.[pk]?.odometer){
         const ex=migrateEntry(d.months?.[pk]);
         setUf({year:pm.getFullYear(),month:pm.getMonth(),odometer:"",
@@ -354,12 +375,15 @@ export default function App() {
   // no reading yet. Falls back to the current month once we're past mid-month.
   const pendingMonth = useMemo(()=>{
     if(!appData?.setup) return null;
-    const inYear=(k)=>getYearMonths(appData.setup.yearStart).some(m=>m.key===k);
+    const tk=trackFromOf(appData.setup).slice(0,7);
+    // A month before tracking began has no reading and never will — nagging
+    // about one asks for something the app cannot accept.
+    const open=(k)=>k>=tk && getYearMonths(appData.setup.yearStart).some(m=>m.key===k)
+                 && !appData.months?.[k]?.odometer;
     const pm=new Date(today.getFullYear(),today.getMonth()-1,1);
     const pk=mKey(pm.getFullYear(),pm.getMonth());
-    if(inYear(pk)&&!appData.months?.[pk]?.odometer)
-      return {key:pk,name:MONTH_HE[pm.getMonth()],year:pm.getFullYear(),month:pm.getMonth()};
-    if(today.getDate()>=15&&inYear(todayKey)&&!appData.months?.[todayKey]?.odometer)
+    if(open(pk)) return {key:pk,name:MONTH_HE[pm.getMonth()],year:pm.getFullYear(),month:pm.getMonth()};
+    if(today.getDate()>=15&&open(todayKey))
       return {key:todayKey,name:MONTH_HE[today.getMonth()],year:today.getFullYear(),month:today.getMonth()};
     return null;
   },[appData,today,todayKey]);
@@ -539,10 +563,15 @@ export default function App() {
     if(!window.confirm(`להתחיל שנה חדשה מ-${newStart}?\nהשנה הקודמת תישמר בארכיון.`)) return;
     persistWith(prev=>({
       ...prev,
-      setup:{...prev.setup,yearStart:newStart,startOdometer},
+      setup:{...prev.setup,yearStart:newStart,startOdometer,
+        // A fresh cycle starts with a clean slate: the app has data from day
+        // one, and last year's spend must not be charged against this budget.
+        trackFrom:newStart, priorPersonal:0, priorIsEstimate:false},
       months:{},
+      lastWeekLogged:null,
       archive:[...(prev.archive||[]),{yearStart:prev.setup.yearStart,months:prev.months||{},
-               budget:prev.setup.yearlyBudget||DEFAULT_BUDGET}],
+               budget:prev.setup.yearlyBudget||DEFAULT_BUDGET,
+               priorPersonal:prev.setup.priorPersonal||0}],
     }));
     setUf({year:today.getFullYear(),month:today.getMonth(),odometer:"",dayOverrides:{}});
     showToast("שנה חדשה החלה ✓");

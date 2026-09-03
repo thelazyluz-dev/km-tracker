@@ -1,14 +1,18 @@
 {
   "name": "8-400",
   "short_name": "8-400",
-  "description": "מעקב ק\"מ פרטי לצרכי מס",
+  "description": "מעקב ק\"מ פרטי לרכב צמוד",
   "start_url": "/km-tracker/",
+  "scope": "/km-tracker/",
   "display": "standalone",
+  "orientation": "portrait",
   "background_color": "#1a1a2e",
   "theme_color": "#1a1a2e",
   "dir": "rtl",
   "lang": "he",
+  "categories": ["productivity", "utilities"],
   "icons": [
-    { "src": "/km-tracker/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+    { "src": "/km-tracker/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/km-tracker/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
   ]
 }

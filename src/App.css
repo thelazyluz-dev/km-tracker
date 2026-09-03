@@ -176,3 +176,15 @@ input[type=date]::-webkit-calendar-picker-indicator {
   padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px)) !important;
 }
 @media (prefers-reduced-motion: reduce) { .install-banner { animation: none !important; } }
+
+/* ── Number transitions ── */
+@keyframes numBump { 0% { transform: scale(0.82); opacity: 0.45; } 100% { transform: none; opacity: 1; } }
+.num-bump { animation: numBump 0.2s cubic-bezier(0.34, 1.5, 0.64, 1) both; }
+
+/* ── Verdict ring: a soft breathing glow while it settles ── */
+@keyframes ringSettle { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: none; } }
+.ring-wrap { animation: ringSettle 0.5s cubic-bezier(0.22, 0.9, 0.3, 1) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .num-bump, .ring-wrap, .install-banner { animation: none !important; }
+}

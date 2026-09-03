@@ -153,8 +153,42 @@ function makeS(cl){
   };
 }
 
+const prefersReducedMotion = ()=>{
+  try{ return window.matchMedia("(prefers-reduced-motion: reduce)").matches; }catch{ return false; }
+};
+
+// Counts a figure up to its value once, so the headline numbers land rather
+// than just appearing. Skipped entirely when the viewer asks for less motion.
+function useCountUp(value,duration=800){
+  const [n,setN]=useState(()=>prefersReducedMotion()?value:0);
+  const fromRef=useRef(0);
+  useEffect(()=>{
+    if(prefersReducedMotion()||!Number.isFinite(value)){ setN(value); return; }
+    const from=fromRef.current, delta=value-from;
+    if(delta===0){ setN(value); return; }
+    let raf, start;
+    const tick=(t)=>{
+      if(start===undefined) start=t;
+      const p=Math.min(1,(t-start)/duration);
+      const eased=1-Math.pow(1-p,3);            // ease-out cubic
+      setN(Math.round(from+delta*eased));
+      if(p<1) raf=requestAnimationFrame(tick); else fromRef.current=value;
+    };
+    raf=requestAnimationFrame(tick);
+    return ()=>cancelAnimationFrame(raf);
+  },[value,duration]);
+  return n;
+}
+
 function RingProgress({pct,color,trackColor}){
-  const r=46, circ=2*Math.PI*r, offset=circ-(Math.min(pct,100)/100)*circ;
+  // Start empty and fill on mount so the ring reads as a measurement being taken
+  const [shown,setShown]=useState(()=>prefersReducedMotion()?pct:0);
+  useEffect(()=>{
+    if(prefersReducedMotion()){ setShown(pct); return; }
+    const t=setTimeout(()=>setShown(pct),60);
+    return ()=>clearTimeout(t);
+  },[pct]);
+  const r=46, circ=2*Math.PI*r, offset=circ-(Math.min(shown,100)/100)*circ;
   return(
     <svg width="120" height="120" style={{transform:"rotate(-90deg)",flexShrink:0}}>
       <circle cx="60" cy="60" r={r} fill="none" stroke={trackColor||"rgba(255,255,255,0.07)"} strokeWidth="9"/>
@@ -653,6 +687,9 @@ export default function App() {
 
 
   // The single "am I OK?" answer the dashboard leads with
+  const allowanceShown = useCountUp(annual?.allowance ?? 0);
+  const remainingShown = useCountUp(annual?.remaining ?? 0);
+
   const verdict = useMemo(()=>{
     if(!annual) return null;
     const over = annual.recordedCount>=2 && annual.overBy>0;
@@ -662,12 +699,12 @@ export default function App() {
       line:<>בקצב הנוכחי תחרוג ב-<strong style={{color:cl.orange}}>{annual.overBy.toLocaleString()}</strong> ק״מ.
             כדאי לרדת ל-{annual.allowance.toLocaleString()} ק״מ בחודש.</>};
     if(annual.pct>=85) return {icon:"⚠️",color:cl.orange,tint:cl.orangeBg,title:"שים לב",
-      line:<>נשארו <strong style={{color:cl.orange}}>{annual.remaining.toLocaleString()}</strong> ק״מ בלבד
+      line:<>נשארו <strong style={{color:cl.orange}}>{remainingShown.toLocaleString()}</strong> ק״מ בלבד
             ל-{annual.monthsLeft} החודשים הבאים.</>};
     return {icon:"✅",color:cl.green,tint:cl.greenBg,title:"אתה בסדר",
-      line:<>נשארו <strong style={{color:cl.text}}>{annual.remaining.toLocaleString()}</strong> ק״מ
+      line:<>נשארו <strong style={{color:cl.text}}>{remainingShown.toLocaleString()}</strong> ק״מ
             מתוך {annual.budget.toLocaleString()}.</>};
-  },[annual,cl]);
+  },[annual,cl,remainingShown]);
 
   function openDayModal(iso, year, month, d){
     setModalState(getEffectiveState(iso, year, month, d, uf.dayOverrides));
@@ -807,7 +844,11 @@ export default function App() {
       <div style={S.wrap}>
         <div style={{paddingBottom:"28px",marginBottom:"28px"}}>
           <div style={{fontSize:"13px",fontWeight:600,color:cl.accent,marginBottom:"10px"}}>ברוך הבא</div>
-          <div style={{...S.h1,fontSize:"32px"}}>🚗 8-400</div>
+          <div style={{display:"flex",alignItems:"center",gap:"12px"}}>
+            <img src={import.meta.env.BASE_URL+"icon.svg"} alt="" width="46" height="46"
+              style={{borderRadius:"12px",display:"block"}}/>
+            <div style={{...S.h1,fontSize:"32px"}}>8-400</div>
+          </div>
           <div style={{fontSize:"14px",color:cl.muted2,marginTop:"8px",lineHeight:"1.6"}}>ניהול חכם של ק״מ שנתי</div>
         </div>
         <div style={{...S.cardYellow,display:"flex",gap:"14px",alignItems:"flex-start"}}>
@@ -1051,7 +1092,8 @@ export default function App() {
       <div style={S.wrap}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"18px"}}>
           <div style={{display:"flex",alignItems:"center",gap:"9px"}}>
-            <span style={{fontSize:"25px",lineHeight:1}}>🚗</span>
+            <img src={import.meta.env.BASE_URL+"icon.svg"} alt="" width="30" height="30"
+              style={{borderRadius:"8px",display:"block"}}/>
             <div style={{...S.h1,fontSize:"24px",letterSpacing:"-0.5px"}}>8-400</div>
           </div>
           <div style={{display:"flex",gap:"7px"}}>
@@ -1139,7 +1181,7 @@ export default function App() {
             {(annual.recordedCount>0||annual.priorPersonal>0) && (
             <div className="km-card" style={{...S.card,textAlign:"center",paddingTop:"28px",paddingBottom:"26px",
               background:`linear-gradient(160deg,${verdict.tint} 0%,transparent 75%)`,border:`1px solid ${verdict.color}33`}}>
-              <div style={{position:"relative",width:"120px",margin:"0 auto"}}>
+              <div className="ring-wrap" style={{position:"relative",width:"120px",margin:"0 auto"}}>
                 <RingProgress pct={annual.pct} color={verdict.color} trackColor={isDark?"rgba(255,255,255,0.07)":"rgba(0,0,0,0.07)"}/>
                 <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
                   <div style={{fontSize:"30px",lineHeight:1}}>{verdict.icon}</div>
@@ -1179,7 +1221,7 @@ export default function App() {
               <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between"}}>
                 <div style={{display:"flex",alignItems:"baseline",gap:"7px"}}>
                   <div className="stat-num" style={{fontSize:"44px",fontWeight:800,lineHeight:1,
-                    color:cl.text,letterSpacing:"-1.5px"}}>{annual.allowance.toLocaleString()}</div>
+                    color:cl.text,letterSpacing:"-1.5px"}}>{allowanceShown.toLocaleString()}</div>
                   <div style={{fontSize:"15px",color:cl.muted,fontWeight:600}}>ק"מ</div>
                 </div>
                 <span style={S.badge(cl.blue,cl.blueBg)}>≈ {annual.perDay.toLocaleString()} ליום</span>
@@ -1273,7 +1315,8 @@ export default function App() {
                   cursor:ufWorkDays<=0?"default":"pointer",fontFamily:"inherit",lineHeight:1,
                   opacity:ufWorkDays<=0?0.4:1}}>−</button>
               <div style={{flex:1,textAlign:"center"}}>
-                <div className="stat-num" style={{fontSize:"38px",fontWeight:800,color:cl.text,lineHeight:1}}>{ufWorkDays}</div>
+                <div key={ufWorkDays} className="stat-num num-bump"
+                  style={{fontSize:"38px",fontWeight:800,color:cl.text,lineHeight:1}}>{ufWorkDays}</div>
                 <div style={{fontSize:"11px",color:cl.muted,marginTop:"4px"}}>ימי עבודה</div>
               </div>
               <button className="btn-ghost" onClick={()=>adjustWorkDays(1)}
@@ -1640,7 +1683,8 @@ export default function App() {
           direction:"rtl",boxShadow:"0 -8px 32px rgba(0,0,0,0.28)"}}>
           <div style={{maxWidth:"430px",margin:"0 auto"}}>
             <div style={{display:"flex",gap:"12px",alignItems:"flex-start"}}>
-              <span style={{fontSize:"26px",lineHeight:1}}>📲</span>
+              <img src={import.meta.env.BASE_URL+"icon.svg"} alt="" width="34" height="34"
+                style={{borderRadius:"9px",display:"block",flexShrink:0}}/>
               <div style={{flex:1}}>
                 <div style={{fontSize:"14.5px",fontWeight:700,color:cl.text,marginBottom:"3px"}}>
                   התקן את 8-400 על המסך

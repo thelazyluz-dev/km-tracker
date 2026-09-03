@@ -235,7 +235,7 @@ export default function App() {
 
   const [showSettings, setShowSettings] = useState(false);
   const [showAbout,    setShowAbout]    = useState(false);
-  const [settingsForm, setSettingsForm] = useState({commute:"",yearlyBudget:""});
+  const [settingsForm, setSettingsForm] = useState({commute:"",yearlyBudget:"",yearStart:"",priorPersonal:""});
 
   const [sf, setSf] = useState({yearStart:`${today.getFullYear()}-01-01`,startOdo:"",commute:"62",
                                 yearlyBudget:String(DEFAULT_BUDGET),mode:"today",priorPersonal:""});
@@ -250,6 +250,18 @@ export default function App() {
     const [y,m]=sf.yearStart.split("-").map(Number);
     return (today.getFullYear()-y)*12+(today.getMonth()-(m-1));
   },[midYear,sf.yearStart,today]);
+
+  // For someone who has no idea what they've used, assuming zero is the worst
+  // possible guess — it hands them a budget they have already partly spent.
+  // An even burn rate across the elapsed days is a defensible starting point.
+  const proRated = useMemo(()=>{
+    if(!midYear) return 0;
+    const [y,m,d]=sf.yearStart.split("-").map(Number);
+    const start=new Date(y,m-1,d);
+    const elapsed=Math.max(0,Math.round((today-start)/86400000));
+    const budget=Number(sf.yearlyBudget)||DEFAULT_BUDGET;
+    return Math.round(Math.min(budget,budget*(elapsed/365))/50)*50;
+  },[midYear,sf.yearStart,sf.yearlyBudget,today]);
 
   const [uf, setUf] = useState({year:today.getFullYear(),month:today.getMonth(),odometer:"",dayOverrides:{}});
   const TAB_ORDER=["dashboard","update","history"];
@@ -681,6 +693,7 @@ export default function App() {
       trackFrom: startedToday ? todayISO : sf.yearStart,
       startOdometer:odo, commute:c, yearlyBudget:b,
       priorPersonal: startedToday ? Math.max(0,Number(sf.priorPersonal)||0) : 0,
+      priorIsEstimate: !!(startedToday && sf.priorIsEstimate),
     },months:{}};
     persist(d);
     setScreen("main");
@@ -690,9 +703,17 @@ export default function App() {
   function handleSaveSettings(){
     const c=Number(settingsForm.commute), b=Number(settingsForm.yearlyBudget);
     if(!(c>0)||!(b>0)){ showToast("הזן מספרים חיוביים",cl.red); return; }
+    if(settingsForm.yearStart&&!/^\d{4}-\d{2}-\d{2}$/.test(settingsForm.yearStart)){
+      showToast("תאריך לא תקין",cl.red); return; }
+    const prior=Math.max(0,Number(settingsForm.priorPersonal)||0);
+    const priorChanged=prior!==(Number(appData.setup.priorPersonal)||0);
     const newData={
       ...appData,
-      setup:{...appData.setup,commute:c,yearlyBudget:b}
+      setup:{...appData.setup,commute:c,yearlyBudget:b,
+        yearStart:settingsForm.yearStart||appData.setup.yearStart,
+        priorPersonal:prior,
+        // Editing the figure by hand means it is no longer our guess
+        priorIsEstimate: priorChanged ? false : !!appData.setup.priorIsEstimate}
     };
     persist(newData);
     setShowSettings(false);
@@ -836,12 +857,37 @@ export default function App() {
                   <label style={S.label}>קריאת המד היום (ק״מ)</label>
                   <input style={S.input} type="number" placeholder="למשל: 53600"
                     value={sf.startOdo} onChange={e=>setSf({...sf,startOdo:e.target.value})}/>
+
                   <label style={S.label}>כמה ק״מ פרטי כבר ניצלת השנה?</label>
-                  <input style={S.input} type="number" placeholder="למשל: 3500 — אם לא ידוע, השאר ריק"
-                    value={sf.priorPersonal} onChange={e=>setSf({...sf,priorPersonal:e.target.value})}/>
-                  <p style={{...S.hint,color:cl.yellow}}>
-                    בלי המספר הזה המכסה החודשית תיראה גדולה ממה שבאמת נשאר לך.
-                    אפשר לקבל אותו מהליסינג או ממחלקת הרכב.
+                  <input style={S.input} type="number" placeholder="אם לא ידוע — בחר למטה"
+                    value={sf.priorPersonal}
+                    onChange={e=>setSf({...sf,priorPersonal:e.target.value,priorIsEstimate:false})}/>
+                  {/* Nobody should be forced to guess badly. Assuming zero is the
+                      worst guess of all — it hands out a budget already spent. */}
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px",marginTop:"10px"}}>
+                    <button onClick={()=>setSf({...sf,priorPersonal:String(proRated),priorIsEstimate:true})}
+                      style={{padding:"12px 8px",borderRadius:"11px",cursor:"pointer",fontFamily:FONT,
+                        fontSize:"12px",fontWeight:700,lineHeight:"1.5",textAlign:"center",
+                        border:`1px solid ${cl.border}`,background:cl.surface2,color:cl.muted2}}>
+                      אין לי מושג
+                      <div style={{fontSize:"11px",fontWeight:600,color:cl.accent,marginTop:"3px"}}>
+                        הערך ~{proRated.toLocaleString()}
+                      </div>
+                    </button>
+                    <button onClick={()=>setSf({...sf,priorPersonal:"0",priorIsEstimate:false})}
+                      style={{padding:"12px 8px",borderRadius:"11px",cursor:"pointer",fontFamily:FONT,
+                        fontSize:"12px",fontWeight:700,lineHeight:"1.5",textAlign:"center",
+                        border:`1px solid ${cl.border}`,background:cl.surface2,color:cl.muted2}}>
+                      קיבלתי רכב עכשיו
+                      <div style={{fontSize:"11px",fontWeight:600,color:cl.green,marginTop:"3px"}}>0 ק״מ</div>
+                    </button>
+                  </div>
+                  <p style={S.hint}>
+                    {sf.priorIsEstimate
+                      ? <><strong style={{color:cl.accent}}>הערכה</strong> — לפי {monthsSinceStart} חודשים שעברו מתוך 12,
+                          בהנחה שניצלת בקצב אחיד. תוכל לתקן בהגדרות בכל רגע.</>
+                      : <>את המספר המדויק אפשר לקבל מחברת הליסינג או ממחלקת הרכב.
+                          עדיף הערכה מאשר להשאיר ריק — ריק נחשב 0 והמכסה תיראה גדולה מדי.</>}
                   </p>
                 </>
               )}
@@ -1011,7 +1057,10 @@ export default function App() {
           <div style={{display:"flex",gap:"7px"}}>
             <button style={{...S.btnGhost,padding:"9px 12px",fontSize:"15px"}} className="btn-ghost" onClick={()=>setShowAbout(true)}>ℹ️</button>
             <button style={{...S.btnGhost,padding:"9px 12px",fontSize:"15px"}} className="btn-ghost" onClick={()=>{
-              setSettingsForm({commute:String(appData.setup.commute),yearlyBudget:String(appData.setup.yearlyBudget||DEFAULT_BUDGET)});
+              setSettingsForm({commute:String(appData.setup.commute),
+                yearlyBudget:String(appData.setup.yearlyBudget||DEFAULT_BUDGET),
+                yearStart:appData.setup.yearStart,
+                priorPersonal:String(appData.setup.priorPersonal||0)});
               setShowSettings(true);
             }}>⚙️</button>
           </div>
@@ -1100,6 +1149,28 @@ export default function App() {
               <div style={{fontSize:"14.5px",color:cl.muted2,marginTop:"7px",lineHeight:"1.65",
                 maxWidth:"290px",marginInline:"auto"}}>{verdict.line}</div>
             </div>
+            )}
+
+            {/* An estimated starting point shouldn't quietly become fact */}
+            {appData?.setup?.priorIsEstimate && (
+              <div style={{...S.card,background:cl.yellowBg,border:`1px solid ${cl.yellow}33`,
+                display:"flex",gap:"11px",alignItems:"flex-start"}}>
+                <span style={{fontSize:"18px",lineHeight:1,marginTop:"1px"}}>≈</span>
+                <div style={{flex:1,fontSize:"12.5px",color:cl.muted2,lineHeight:"1.65"}}>
+                  הניצול שלפני ההתקנה (<strong style={{color:cl.text}}>{annual.priorPersonal.toLocaleString()}</strong> ק״מ)
+                  הוא הערכה. קיבלת את המספר המדויק?{" "}
+                  <span onClick={()=>{
+                      setSettingsForm({commute:String(appData.setup.commute),
+                        yearlyBudget:String(appData.setup.yearlyBudget||DEFAULT_BUDGET),
+                        yearStart:appData.setup.yearStart,
+                        priorPersonal:String(appData.setup.priorPersonal||0)});
+                      setShowSettings(true);
+                    }}
+                    style={{color:cl.yellow,fontWeight:700,cursor:"pointer",textDecoration:"underline"}}>
+                    עדכן אותו
+                  </span>
+                </div>
+              </div>
             )}
 
             {/* This month, in the terms people actually think in */}
@@ -1322,6 +1393,27 @@ export default function App() {
             <label style={S.label}>תקציב שנתי (ק"מ)</label>
             <input style={S.input} type="number" value={settingsForm.yearlyBudget}
               onChange={e=>setSettingsForm({...settingsForm,yearlyBudget:e.target.value})}/>
+            <label style={S.label}>תחילת שנת המכסה</label>
+            <input style={S.input} type="date" value={settingsForm.yearStart}
+              onChange={e=>setSettingsForm({...settingsForm,yearStart:e.target.value})}/>
+            <p style={S.hint}>אם גילית שהמכסה שלך מתחדשת בתאריך אחר — שנה כאן.</p>
+            {/* Only meaningful for someone who started tracking mid-cycle */}
+            {(appData?.setup?.priorPersonal>0 || appData?.setup?.trackFrom) && (
+              <>
+                <label style={S.label}>
+                  ק״מ פרטי שנוצלו לפני תחילת המעקב
+                  {appData?.setup?.priorIsEstimate &&
+                    <span style={{color:cl.yellow,fontWeight:700}}> · הערכה</span>}
+                </label>
+                <input style={S.input} type="number" value={settingsForm.priorPersonal}
+                  onChange={e=>setSettingsForm({...settingsForm,priorPersonal:e.target.value})}/>
+                <p style={S.hint}>
+                  {appData?.setup?.priorIsEstimate
+                    ? "המספר הזה הוא הערכה. קיבלת את המספר האמיתי מהליסינג? הזן אותו כאן."
+                    : "כמה מהמכסה כבר נוצל לפני שהתקנת את האפליקציה."}
+                </p>
+              </>
+            )}
             <button className="btn-main" style={S.btn} onClick={handleSaveSettings}>שמור שינויים</button>
             {"Notification" in window && Notification.permission!=="granted" && (
               <button className="btn-main" style={{...S.btn,marginTop:"8px",background:"linear-gradient(135deg,#92400e,#fb923c)"}}

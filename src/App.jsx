@@ -633,7 +633,11 @@ export default function App() {
     const workDays=workDaysFor(year,month,me.dayOverrides||{},gapMonths);
     const workKm=workDays*(appData.setup.commute||62);
     const personal=Math.max(0,totalKm-workKm);
-    return {totalKm,workDays,workKm,personal,odometer:entry.odometer,
+    // Driving less than the marked workdays imply is a contradiction, not good
+    // news: either days off went unmarked or the commute figure is wrong. The
+    // clamp above hides it, so carry the size of the gap out with the result.
+    const deficit=Math.max(0,workKm-totalKm);
+    return {totalKm,workDays,workKm,personal,deficit,odometer:entry.odometer,
             dayOverrides:me.dayOverrides||{},gapMonths};
   },[appData,getPrevInfo,workDaysFor]);
 
@@ -658,11 +662,14 @@ export default function App() {
     const pct=Math.min(100,Math.round(totalPersonal/budget*100));
     const maxPersonal=Math.max(1,...Object.values(byMonth).map(s=>s.personal));
 
-    // Forecast: project the tracked months' average across the months that are
-    // actually being tracked, then add what was already spent before setup.
+    // Forecast: project the tracked months' average across the months being
+    // tracked, then add what was spent before setup. The month in progress is
+    // left out of the average — a few days of it would drag the rate down and
+    // make an over-budget year look comfortable.
     const recorded=Object.values(byMonth);
-    const trackedTotal=totalPersonal-priorPersonal;
-    const avg=recorded.length?trackedTotal/recorded.length:0;
+    const completedKeys=Object.keys(byMonth).filter(k=>k<todayKey);
+    const basis=completedKeys.length?completedKeys.map(k=>byMonth[k]):recorded;
+    const avg=basis.length?basis.reduce((a,s)=>a+s.personal,0)/basis.length:0;
     const trackedMonths=months.filter(m=>m.key>=tk).length;
     const projected=Math.round(priorPersonal+avg*trackedMonths);
     const overBy=projected-budget;
@@ -711,7 +718,8 @@ export default function App() {
     }
     const workKm=workDays*(appData.setup.commute||62);
     const personal=Math.max(0,totalKm-workKm);
-    return {totalKm,workDays,workKm,personal,prevOdo,gapMonths};
+    return {totalKm,workDays,workKm,personal,prevOdo,gapMonths,
+            deficit:Math.max(0,workKm-totalKm)};
   },[uf.odometer,uf.year,uf.month,appData,getPrevInfo,ufWorkDays,capFor]);
 
 
@@ -1383,6 +1391,24 @@ export default function App() {
               </div>
             )}
 
+            {/* 0 private km can mean "a quiet month" or "the numbers don't add
+                up" — one day's worth of slack tells them apart. */}
+            {livePreview && livePreview.deficit > (appData?.setup?.commute||62) && (
+              <div style={{marginTop:"12px",padding:"14px 16px",borderRadius:"14px",
+                background:cl.yellowBg,border:`1px solid ${cl.yellow}44`}}>
+                <div style={{fontSize:"13px",fontWeight:700,color:cl.yellow,marginBottom:"5px"}}>
+                  ⚠️ המספרים לא מסתדרים
+                </div>
+                <div style={{fontSize:"12.5px",color:cl.muted2,lineHeight:"1.7"}}>
+                  נסעת {livePreview.totalKm.toLocaleString()} ק״מ, אבל {livePreview.workDays} ימי
+                  עבודה דורשים {livePreview.workKm.toLocaleString()} ק״מ — חסרים {livePreview.deficit.toLocaleString()}.
+                  <br/>
+                  כנראה <strong style={{color:cl.text}}>לא סימנת ימים שלא נסעת</strong> (הורד במונה למעלה),
+                  או שההלוך-חזור בהגדרות גדול מהאמת.
+                </div>
+              </div>
+            )}
+
 
             <button className="btn-main" style={S.btn} onClick={handleSave}>שמור עדכון ✓</button>
           </div>
@@ -1416,6 +1442,10 @@ export default function App() {
                         <div style={{display:"flex",alignItems:"baseline",gap:"8px"}}>
                           <span style={{fontWeight:700,fontSize:"15px",color:cl.text}}>{MONTH_HE[m.month]}</span>
                           <span style={{fontSize:"11.5px",color:cl.muted}}>{s.workDays} ימי עבודה</span>
+                          {s.deficit>(annual.commute||62) && (
+                            <span title={`חסרים ${s.deficit} ק״מ`}
+                              style={{fontSize:"11.5px",color:cl.yellow,fontWeight:700}}>⚠️</span>
+                          )}
                         </div>
                         <div style={{display:"flex",alignItems:"baseline",gap:"5px"}}>
                           <span className="stat-num" style={{fontSize:"19px",fontWeight:800,

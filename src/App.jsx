@@ -261,20 +261,31 @@ export default function App() {
   // ── Install prompt: offered at most once a week, never once installed ──
   const [installEvt, setInstallEvt] = useState(null);
   const [showInstall, setShowInstall] = useState(false);
+  // Chrome may fire beforeinstallprompt at any moment, including while the user
+  // is still on the setup screen — capture it whenever it arrives.
   useEffect(()=>{
-    if(isInstalled()) return;
+    const onPrompt=(e)=>{ e.preventDefault(); setInstallEvt(e); };
+    const onInstalled=()=>{ setShowInstall(false); setInstallEvt(null); };
+    window.addEventListener("beforeinstallprompt",onPrompt);
+    window.addEventListener("appinstalled",onInstalled);
+    return ()=>{ window.removeEventListener("beforeinstallprompt",onPrompt);
+                 window.removeEventListener("appinstalled",onInstalled); };
+  },[]);
+
+  // Decide about showing it only once the user is past onboarding, so a first
+  // run offers the banner right after setup rather than never.
+  useEffect(()=>{
+    if(screen!=="main" || isInstalled()) return;
     let last=0;
     try{ last=Number(localStorage.getItem(INSTALL_KEY))||0; }catch{}
     if(Date.now()-last < WEEK_MS) return;
-    // Chrome hands us a deferred prompt; iOS never does, so show instructions.
-    const onPrompt=(e)=>{ e.preventDefault(); setInstallEvt(e); setShowInstall(true); };
-    window.addEventListener("beforeinstallprompt",onPrompt);
-    const t=setTimeout(()=>{ if(isIOS()) setShowInstall(true); },1200);
-    const onInstalled=()=>{ setShowInstall(false); setInstallEvt(null); };
-    window.addEventListener("appinstalled",onInstalled);
-    return ()=>{ window.removeEventListener("beforeinstallprompt",onPrompt);
-                 window.removeEventListener("appinstalled",onInstalled); clearTimeout(t); };
-  },[]);
+    // Only worth showing where the user can act: Chrome gives a real prompt,
+    // iOS has no API but the Share-sheet steps work. Anywhere else the banner
+    // would just be a message with nothing behind it.
+    if(!installEvt && !isIOS()) return;
+    const t=setTimeout(()=>setShowInstall(true), installEvt?300:1200);
+    return ()=>clearTimeout(t);
+  },[screen,installEvt]);
 
   function dismissInstall(){
     try{ localStorage.setItem(INSTALL_KEY,String(Date.now())); }catch{}

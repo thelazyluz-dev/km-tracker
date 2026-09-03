@@ -844,11 +844,7 @@ export default function App() {
       <div style={S.wrap}>
         <div style={{paddingBottom:"28px",marginBottom:"28px"}}>
           <div style={{fontSize:"13px",fontWeight:600,color:cl.accent,marginBottom:"10px"}}>ברוך הבא</div>
-          <div style={{display:"flex",alignItems:"center",gap:"12px"}}>
-            <img src={import.meta.env.BASE_URL+"icon.svg"} alt="" width="46" height="46"
-              style={{borderRadius:"12px",display:"block"}}/>
-            <div style={{...S.h1,fontSize:"32px"}}>8-400</div>
-          </div>
+          <div style={{...S.h1,fontSize:"32px"}}>8-400</div>
           <div style={{fontSize:"14px",color:cl.muted2,marginTop:"8px",lineHeight:"1.6"}}>ניהול חכם של ק״מ שנתי</div>
         </div>
         <div style={{...S.cardYellow,display:"flex",gap:"14px",alignItems:"flex-start"}}>
@@ -1092,8 +1088,6 @@ export default function App() {
       <div style={S.wrap}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"18px"}}>
           <div style={{display:"flex",alignItems:"center",gap:"9px"}}>
-            <img src={import.meta.env.BASE_URL+"icon.svg"} alt="" width="30" height="30"
-              style={{borderRadius:"8px",display:"block"}}/>
             <div style={{...S.h1,fontSize:"24px",letterSpacing:"-0.5px"}}>8-400</div>
           </div>
           <div style={{display:"flex",gap:"7px"}}>

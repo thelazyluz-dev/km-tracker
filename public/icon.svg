@@ -1,32 +1,17 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" role="img" aria-label="8-400">
-  <defs>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" role="img" aria-label="8-400"><defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#242438"/>
-      <stop offset="1" stop-color="#14142a"/>
+      <stop offset="0" stop-color="#262640"/><stop offset="1" stop-color="#121224"/>
     </linearGradient>
-    <linearGradient id="arc" x1="0" y1="1" x2="1" y2="0">
-      <stop offset="0"   stop-color="#7c3aed"/>
-      <stop offset="0.55" stop-color="#a78bfa"/>
-      <stop offset="1"   stop-color="#34d399"/>
+    <linearGradient id="g" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#a78bfa"/><stop offset="1" stop-color="#34d399"/>
     </linearGradient>
   </defs>
-
   <rect width="192" height="192" rx="42" fill="url(#bg)"/>
-
-  <!-- Budget gauge: the same ring the app leads with, about two-thirds spent -->
-  <g transform="rotate(135 96 96)">
-    <circle cx="96" cy="96" r="52" fill="none" stroke="#ffffff" stroke-opacity="0.10"
-            stroke-width="15" stroke-linecap="round"
-            stroke-dasharray="245 327"/>
-    <circle cx="96" cy="96" r="52" fill="none" stroke="url(#arc)"
-            stroke-width="15" stroke-linecap="round"
-            stroke-dasharray="167 327"/>
-  </g>
-
-  <!-- Needle resting at the end of the filled arc -->
-  <g transform="rotate(50 96 96)">
-    <rect x="93" y="52" width="6" height="30" rx="3" fill="#f2f0fa"/>
-  </g>
-  <circle cx="96" cy="96" r="8.5" fill="#f2f0fa"/>
-  <circle cx="96" cy="96" r="3.5" fill="#14142a"/>
+  <rect x="28" y="60" width="136" height="72" rx="18" fill="#0c0c1a" stroke="#ffffff" stroke-opacity="0.12" stroke-width="2"/>
+  <ellipse cx="51" cy="83.28" rx="8.798399999999999" ry="11.28" fill="none" stroke="#f2f0fa" stroke-width="7"/>
+  <ellipse cx="51" cy="106.8" rx="11.28" ry="13.200000000000001" fill="none" stroke="#f2f0fa" stroke-width="7"/>
+  <path d="M 88.512 72 L 72.72 105.6 H 95.844" fill="none" stroke="#f2f0fa" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M 88.512 72 V 120" fill="none" stroke="#f2f0fa" stroke-width="7" stroke-linecap="round"/>
+  <rect x="105.72" y="72" width="22.56" height="48" rx="11.28" fill="none" stroke="#f2f0fa" stroke-width="7"/>
+  <rect x="138.72" y="72" width="22.56" height="48" rx="11.28" fill="none" stroke="url(#g)" stroke-width="7"/>
 </svg>
